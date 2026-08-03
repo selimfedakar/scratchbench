@@ -1,0 +1,14 @@
+slug: sharded_dataloader
+version: 1
+category: data
+difficulty: 4
+probes: >
+  Whether the sample order is a function of the seed and epoch alone rather
+  than of the cluster shape, whether the ranks partition it disjointly, whether
+  every rank receives the same batch count so a collective cannot deadlock, and
+  whether resuming mid-epoch continues instead of replaying.
+time_limit_s: 60
+requires_gpu: false
+deps: []
+added: 2026-07-26
+frozen_set: v1
