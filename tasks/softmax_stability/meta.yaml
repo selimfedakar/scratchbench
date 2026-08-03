@@ -1,0 +1,13 @@
+slug: softmax_stability
+version: 1
+category: numerics
+difficulty: 1
+probes: >
+  Whether the model shifts by the maximum before exponentiating, keeps
+  log_softmax accurate below the underflow floor instead of logging the
+  probabilities, and treats an additive -inf mask as data rather than an error.
+time_limit_s: 60
+requires_gpu: false
+deps: [numpy]
+added: 2026-07-26
+frozen_set: v1
