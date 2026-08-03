@@ -1,0 +1,14 @@
+slug: bpe_merge_order
+version: 1
+category: tokenization
+difficulty: 2
+probes: >
+  Whether encoding follows the learned merge order rather than the most
+  frequent or the leftmost available pair, re-scans after each round so later
+  merges can consume what earlier ones built, and treats a consumed token as
+  unavailable to an overlapping merge.
+time_limit_s: 60
+requires_gpu: false
+deps: []
+added: 2026-07-26
+frozen_set: v1
