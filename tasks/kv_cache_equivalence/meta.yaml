@@ -1,0 +1,14 @@
+slug: kv_cache_equivalence
+version: 1
+category: attention
+difficulty: 3
+probes: >
+  Whether incremental decoding reproduces a full forward pass exactly: rotary
+  positions taken from the cache offset rather than the chunk index, the causal
+  mask aligned to the end of the key range, and the incoming cache treated as
+  immutable data a caller may branch from.
+time_limit_s: 120
+requires_gpu: false
+deps: [numpy]
+added: 2026-07-26
+frozen_set: v1
