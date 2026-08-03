@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scratchbench"
+version = "0.1.0"
+description = "Can the model actually implement it? ML machinery graded by hidden tests, on a laptop, in under five minutes per task."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Selim Fedakar" }]
+keywords = ["benchmark", "machine-learning", "evaluation", "llm"]
+
+# numpy and pytest carry the tasks; PyYAML reads meta.yaml. torch is here
+# rather than optional because the training tasks measure gradients, and a
+# benchmark that silently skips a category is reporting the wrong number.
+dependencies = [
+    "numpy>=1.23",
+    "pytest>=7.1",
+    "PyYAML>=6.0",
+    "torch>=2.0",
+]
+
+# The Anthropic SDK is an extra rather than a dependency. The laptop tier's
+# whole claim is that anyone can clone this and re-run it with no account and
+# no key; installing an API client to do that would quietly contradict it.
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.60"]
+
+[project.urls]
+Homepage = "https://github.com/selimfedakar/scratchbench"
+
+[project.scripts]
+scratchbench = "runner.cli:main"
+
+[tool.setuptools]
+packages = ["runner", "adapters"]
+
+[tool.pytest.ini_options]
+# `pytest` at the repository root tests the harness. It must not walk into
+# tasks/, where the hidden tests import modules that only exist once the runner
+# has assembled a workdir beside them.
+testpaths = ["tests"]
+norecursedirs = ["tasks", "results", "leaderboard", "docs"]
