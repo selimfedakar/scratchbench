@@ -1,0 +1,14 @@
+slug: attention_causal_mask
+version: 1
+category: attention
+difficulty: 2
+probes: >
+  Whether the model gets the masking direction and the -inf convention right,
+  anchors a short query chunk at the end of the key range the way a KV-cache
+  requires, composes padding with causality, and survives the fully masked row
+  that combination produces instead of returning NaN.
+time_limit_s: 90
+requires_gpu: false
+deps: [numpy]
+added: 2026-07-26
+frozen_set: v1
