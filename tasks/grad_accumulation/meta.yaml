@@ -1,0 +1,15 @@
+slug: grad_accumulation
+version: 1
+category: training
+difficulty: 3
+probes: >
+  Whether accumulation reproduces the full-batch update exactly: each
+  micro-batch loss weighted by its share of the batch rather than by one over
+  the chunk count, gradients cleared first, and a single optimiser step at the
+  end so stateful optimisers see one large update instead of several small
+  ones.
+time_limit_s: 180
+requires_gpu: false
+deps: [torch]
+added: 2026-07-26
+frozen_set: v1
