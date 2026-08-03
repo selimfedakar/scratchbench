@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# Run artifacts: results are generated, the leaderboard is curated by hand
+results/*.json
+!results/.gitkeep
+
+# macOS
+.DS_Store
