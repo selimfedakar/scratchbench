@@ -2,8 +2,8 @@
 
     scratchbench list
     scratchbench validate [--tasks all]
-    scratchbench run --model reference [--tasks all]
-    scratchbench report [--last]
+    scratchbench run --model reference [--tasks all] [--repeat N]
+    scratchbench report [--last | --variance]
 """
 
 from __future__ import annotations
@@ -82,7 +82,11 @@ def command_validate(args: argparse.Namespace) -> int:
         if starter.passed:
             problems.append("untouched starter passes — the tests prove nothing")
         elif starter.status == "collection_error":
-            problems.append("starter fails to import rather than fails a test")
+            # The starter is the baseline everything else is judged against, so
+            # there is nothing to compare it to: this says only that the two
+            # halves do not collect together, which is an import error rather
+            # than a test failure and breaks the task either way.
+            problems.append("starter and hidden tests do not collect: an import error, not a failure")
         elif starter.status == "timeout":
             problems.append("starter timed out instead of failing")
 
@@ -121,10 +125,14 @@ def command_validate(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_run(args: argparse.Namespace) -> int:
+def _one_sweep(args, tasks, repeat: dict | None) -> tuple[dict, list[Outcome]]:
+    """One complete pass over the task set, and the document describing it."""
     from adapters import resolve
 
-    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier)
+    # Built per sweep rather than once: an adapter accumulates spend and token
+    # counts, so a reused one would write the running total into every repeat's
+    # results file and the last draw would look ten times as expensive as the
+    # first.
     solve = resolve(args.model)
 
     outcomes: list[Outcome] = []
@@ -149,23 +157,63 @@ def command_run(args: argparse.Namespace) -> int:
         wall_clock,
         attempts=getattr(solve, "max_attempts", 1),
         usd_cost=getattr(solve, "usd_cost", None),
+        tokens=getattr(solve, "token_usage", None),
+        repeat=repeat,
     )
-    print()
-    print(reporting.format_run(payload))
+    return payload, outcomes
 
-    if not args.no_write:
-        path = reporting.write_payload(payload, args.results)
-        print(f"\nwritten to {path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path}")
 
-    harness_failures = [
-        outcome for outcome in outcomes if outcome.status in reporting.HARNESS_FAILURES
-    ]
-    if harness_failures:
-        print(f"\n{len(harness_failures)} task(s) did not produce a measurement:")
-        for outcome in harness_failures:
-            print(f"  {outcome.slug}: {outcome.detail or outcome.status}")
-        return 1
-    return 0
+def command_run(args: argparse.Namespace) -> int:
+    if args.repeat < 1:
+        print("scratchbench: --repeat must be at least 1", file=sys.stderr)
+        return 2
+
+    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier)
+
+    # One identifier shared by every draw in this invocation, so the files can
+    # be grouped afterwards without guessing from timestamps.
+    group = f"{args.model}-{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}"
+    payloads: list[dict] = []
+    failed = 0
+
+    for index in range(1, args.repeat + 1):
+        if args.repeat > 1:
+            print(f"\ndraw {index} of {args.repeat}")
+        repeat = (
+            None
+            if args.repeat == 1
+            else {"group": group, "index": index, "of": args.repeat}
+        )
+        payload, outcomes = _one_sweep(args, tasks, repeat)
+        payloads.append(payload)
+
+        print()
+        print(reporting.format_run(payload))
+
+        if not args.no_write:
+            path = reporting.write_payload(payload, args.results)
+            written = path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path
+            print(f"\nwritten to {written}")
+
+        harness_failures = [
+            outcome for outcome in outcomes if outcome.status in reporting.HARNESS_FAILURES
+        ]
+        if harness_failures:
+            failed += 1
+            print(f"\n{len(harness_failures)} task(s) did not produce a measurement:")
+            for outcome in harness_failures:
+                print(f"  {outcome.slug}: {outcome.detail or outcome.status}")
+
+    # The spread is the whole reason to repeat, so it is printed rather than
+    # left for a second command to find.
+    if args.repeat > 1:
+        # `--tier all` has no single tier to spread, so the headline one is
+        # what gets an error bar. The others are still in each results file.
+        tier = args.tier if args.tier != "all" else reporting.HEADLINE_TIER
+        print()
+        print(reporting.format_variance(payloads, tier=tier))
+
+    return 1 if failed else 0
 
 
 def command_report(args: argparse.Namespace) -> int:
@@ -175,6 +223,9 @@ def command_report(args: argparse.Namespace) -> int:
             print("No results yet.")
             return 1
         print(reporting.format_run(payloads[-1]))
+        return 0
+    if args.variance:
+        print(reporting.format_variance(payloads))
         return 0
     print(reporting.format_leaderboard(payloads))
     return 0
@@ -219,6 +270,18 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--results", type=Path, default=RESULTS_ROOT)
     run.add_argument("--no-write", action="store_true", help="do not write a results file")
     run.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help=(
+            "how many independent sweeps to run. Each one is a complete run "
+            "with its own results file; together they are the error bar a "
+            "single sweep cannot have, because the model is sampled and one "
+            "run is one draw. This is not a retry: no draw sees another's "
+            "results."
+        ),
+    )
+    run.add_argument(
         "--keep", type=Path, default=None, help="copy each graded workdir here for inspection"
     )
     run.set_defaults(func=command_run)
@@ -226,6 +289,11 @@ def build_parser() -> argparse.ArgumentParser:
     report = subparsers.add_parser("report", help="show results")
     report.add_argument("--results", type=Path, default=RESULTS_ROOT)
     report.add_argument("--last", action="store_true", help="show the most recent run in full")
+    report.add_argument(
+        "--variance",
+        action="store_true",
+        help="how many of N draws each task passed, per model and task set",
+    )
     report.set_defaults(func=command_report)
 
     return parser
