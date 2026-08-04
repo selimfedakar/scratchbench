@@ -1,0 +1,19 @@
+slug: fused_rmsnorm_kernel
+version: 1
+category: kernels
+difficulty: 4
+probes: >
+  Whether the model can write a real Triton reduction: float32 accumulation
+  under a float16 input, a row walked in blocks with the tail masked, and two
+  independent row strides, rather than a PyTorch one-liner in a wrapper.
+time_limit_s: 300
+tier: accelerated
+requires_gpu: true
+accelerator: cuda
+deps: [torch, triton]
+added: 2026-07-28
+# In, as of 2026-08-02: the reference passes 24 tests on an RTX A4500, the
+# untouched starter fails all 24 with real test failures, and all six mutants
+# are caught. The transcript is in docs/sessions/06 and the mutation script is
+# in tools/, so the claim is re-runnable rather than remembered.
+frozen_set: v1
