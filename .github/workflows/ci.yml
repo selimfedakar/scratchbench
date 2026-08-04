@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: harness and task set (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # CPU wheels only. The whole premise is that this runs without a GPU,
+          # and the CUDA build is a gigabyte of download that would never be used.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e .
+
+      - name: Harness tests
+        run: python -m pytest -q
+
+      # The gate that matters. For every task: the reference solution passes the
+      # hidden tests, and the untouched starter fails them with real test
+      # failures rather than an import error. If the reference ever stops
+      # passing, the task is broken and no score measured against it means
+      # anything — so this failing blocks the merge.
+      #
+      # Both commands default to the laptop tier, which is the point: this job
+      # has no GPU, so it neither runs the accelerated tasks nor pretends to.
+      - name: Validate every task
+        run: scratchbench validate --verbose
+
+      - name: Control run through the full harness
+        run: scratchbench run --model reference --tasks all --no-write
+
+      # Every published cost, re-derived from the token counts checked in
+      # beside it. The arithmetic used to be a paragraph in a README, which is
+      # a check that runs once: a drifting price table, an edited results file
+      # or a typo in a new model's rate would all pass it forever.
+      - name: Published costs reproduce from their own tokens
+        run: python tools/check_cost.py
+
+# There is no accelerated job here, and its absence is a decision rather than an
+# omission. Running the accelerated tier in CI means attaching a self-hosted
+# runner with an NVIDIA device to this repository, and this repository is
+# public. A pull request can edit `runs-on`, and a returning contributor's pull
+# request runs without approval, so the runner would execute code from a fork on
+# the machine it is registered to. GitHub's own guidance is not to do this.
+#
+# The rented box makes it worse rather than better: it is billed by the hour and
+# disappears, so the registration would have to be redone every session, and a
+# green tick would then mean "a GPU existed at some point" rather than "this task
+# was verified on hardware I can name".
+#
+# `tools/verify_accelerated.sh` is what replaces it. Run it on the box and paste
+# the output into the pull request: it carries the device name, the torch
+# version and the triton version, which is more than a tick says. See
+# CONTRIBUTING.md and docs/sessions/06.
