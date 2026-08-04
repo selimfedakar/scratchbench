@@ -10,6 +10,7 @@ Run with:  python -m pytest -q
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -205,13 +206,50 @@ def test_a_solver_that_raises_is_reported_and_does_not_escape(tmp_path):
     assert "rate limited" in outcome.detail
 
 
-def test_a_solution_that_does_not_import_is_broken_not_merely_wrong(tmp_path):
+def test_a_solution_that_does_not_import_is_the_solutions_failure(tmp_path):
+    # It is tempting to file this under "nothing judged the solution", and that
+    # was the old behaviour. It is wrong: the starter imports cleanly by
+    # contract, so a syntax error in the graded directory was written by the
+    # solver. Calling it an absence of evidence takes the task out of the
+    # denominator, and the models that emit unparseable Python are the weak
+    # ones, so the mistake runs in the direction that flatters them.
+    from runner.sandbox import HARNESS_FAILURES, NO_EVIDENCE
+
     def write_garbage(task, workdir):
         (Path(workdir) / "solution.py").write_text("def answer(:\n")
 
     outcome = grade(load_task(make_task(tmp_path)), write_garbage)
-    assert outcome.status == "collection_error"
+    assert outcome.status == "solution_error"
     assert not outcome.passed
+    assert outcome.status not in NO_EVIDENCE
+    assert outcome.status not in HARNESS_FAILURES
+
+
+def test_a_solution_missing_a_name_the_tests_import_is_also_its_failure(tmp_path):
+    # The commoner version of the same event, and the one an import check on
+    # the solution alone would have missed: the file imports perfectly well and
+    # simply does not contain what the task asked for.
+    def rename_everything(task, workdir):
+        (Path(workdir) / "solution.py").write_text("def reply():\n    return 42\n")
+
+    outcome = grade(load_task(make_task(tmp_path)), rename_everything)
+    assert outcome.status == "solution_error"
+    assert not outcome.passed
+
+
+def test_hidden_tests_that_cannot_collect_at_all_are_not_the_models_fault(tmp_path):
+    # The other side of the line. Nothing about the solution explains this one,
+    # so it is an absence of evidence and it breaks the run.
+    from runner.sandbox import HARNESS_FAILURES, NO_EVIDENCE
+
+    path = make_task(tmp_path)
+    (path / "hidden_tests" / "test_solution.py").write_text(
+        "import a_module_that_does_not_exist\n\n\ndef test_it():\n    assert True\n"
+    )
+    outcome = grade(load_task(path), reference_solve)
+    assert outcome.status == "collection_error"
+    assert outcome.status in NO_EVIDENCE
+    assert outcome.status in HARNESS_FAILURES
 
 
 def test_a_solution_that_hangs_is_stopped_at_the_time_limit(tmp_path):
@@ -265,8 +303,11 @@ def test_the_tier_breakdown_keeps_the_laptop_rate_separate(tmp_path):
     assert payload["pass_rate_by_tier"]["laptop"] == {
         "pass_rate": 0.5,
         "solved": 1,
+        "measured": 2,
         "total": 2,
         "no_accelerator": 0,
+        "no_evidence": 0,
+        "categories": {"attention": 0.0, "numerics": 1.0},
     }
     assert all(entry["tier"] == "laptop" for entry in payload["tasks"])
 
@@ -311,6 +352,137 @@ def test_a_task_whose_dependency_is_missing_is_skipped_not_failed_silently(tmp_p
     assert outcome.status == "missing_deps"
     assert not outcome.passed
     assert "definitely_not_installed" in outcome.detail
+
+
+# -- absence of evidence, in every place a rate is computed ----------------
+
+
+def test_a_run_where_the_adapter_never_answered_has_no_pass_rate():
+    # The whole sweep failing on a missing API key produced `pass_rate: 0.0`
+    # and `measured: 8` — a published zero about a model the harness never
+    # reached. Missing hardware was handled and this was not, in the same
+    # arithmetic, which is why the classification is one table now.
+    def explodes(task, workdir):
+        raise RuntimeError("no API key")
+
+    tasks = select_tasks(TASKS_ROOT, "softmax_stability,kv_cache_equivalence")
+    outcomes = [grade(task, explodes) for task in tasks]
+    assert {outcome.status for outcome in outcomes} == {"adapter_error"}
+
+    payload = reporting.build_payload("dummy", tasks, outcomes, wall_clock_s=1.0)
+
+    assert payload["pass_rate"] is None
+    assert payload["measured"] == 0
+    assert payload["not_measured"] == 2
+    assert payload["pass_rate_by_category"] == {}
+    assert payload["pass_rate_by_tier"]["laptop"]["pass_rate"] is None
+    assert payload["pass_rate_by_tier"]["laptop"]["no_evidence"] == 2
+    # And nothing about it reads as a hardware problem, which is the other
+    # absence of evidence and a completely different conversation.
+    assert payload["pass_rate_by_tier"]["laptop"]["no_accelerator"] == 0
+
+
+def test_the_headline_rate_is_one_tier_even_when_both_were_measured():
+    # The failure this guards against could not happen on the machine that
+    # wrote the harness, because an accelerated task there always comes back
+    # `needs_accelerator` and drops out on the no-evidence rule. On a box with
+    # a GPU both tiers are measured, and the headline number — the one the
+    # leaderboard column prints — quietly became their average. Every document
+    # in this repository says that number is the laptop tier.
+    from runner.sandbox import Outcome
+
+    tasks = select_tasks(TASKS_ROOT, "all", tier="all")
+    accelerated = [task for task in tasks if task.tier == "accelerated"]
+    assert accelerated, "this test needs an accelerated task in the set"
+
+    outcomes = [
+        Outcome(
+            slug=task.slug,
+            passed=task.tier == "laptop",
+            status="passed" if task.tier == "laptop" else "failed",
+            duration_s=0.1,
+        )
+        for task in tasks
+    ]
+    payload = reporting.build_payload("dummy", tasks, outcomes, wall_clock_s=1.0)
+
+    assert payload["headline_tier"] == "laptop"
+    assert payload["pass_rate"] == 1.0
+    assert payload["pass_rate_by_tier"]["accelerated"]["pass_rate"] == 0.0
+    # And the category rates do not blend either: `kernels` is an accelerated
+    # category, so it belongs in that tier's block rather than in the headline.
+    assert "kernels" not in payload["pass_rate_by_category"]
+    assert payload["pass_rate_by_tier"]["accelerated"]["categories"] == {"kernels": 0.0}
+
+    # The leaderboard row reads the headline tier's own numbers rather than
+    # counting every task in the file.
+    rate, solved, measured = reporting.headline_of(payload)
+    assert (rate, solved, measured) == (1.0, len(tasks) - len(accelerated), len(tasks) - len(accelerated))
+
+
+def test_a_results_file_written_before_the_split_still_reads_as_laptop_only():
+    # Both published rows are version 1 documents with no `headline_tier`, and
+    # every one of them was a laptop run. Reading them as anything else would
+    # rewrite a published number.
+    v1 = {
+        "results_version": 1,
+        "model": "claude-opus-5",
+        "run_at": "2026-08-03T10:29:32+00:00",
+        "pass_rate": 1.0,
+        "measured": 8,
+        "pass_rate_by_tier": {
+            "laptop": {
+                "pass_rate": 1.0,
+                "solved": 8,
+                "total": 8,
+                "no_accelerator": 0,
+                "no_evidence": 0,
+            }
+        },
+        "tasks": [],
+    }
+    assert reporting.headline_of(v1) == (1.0, 8, 8)
+
+
+def test_the_results_file_says_which_harness_produced_it():
+    # CONTRIBUTING asks for the harness version with every submitted result,
+    # and until now nothing in the file carried one.
+    from runner import __version__
+
+    tasks = select_tasks(TASKS_ROOT, "softmax_stability")
+    payload = reporting.build_payload(
+        "dummy", tasks, [grade(tasks[0], reference_solve)], wall_clock_s=1.0
+    )
+    assert payload["harness_version"] == __version__
+    assert payload["results_version"] == reporting.RESULTS_VERSION
+
+
+def test_every_status_is_classified_and_an_unknown_one_cannot_be_built():
+    from runner.sandbox import HARNESS_FAILURES, NO_EVIDENCE, STATUSES, Outcome
+
+    # The two sets are derived from the table rather than written out twice.
+    assert NO_EVIDENCE | {name for name in STATUSES if name not in NO_EVIDENCE} == set(
+        STATUSES
+    )
+    assert HARNESS_FAILURES <= NO_EVIDENCE
+
+    # The classifications that decide whether a zero gets published.
+    assert "adapter_error" in NO_EVIDENCE
+    assert "collection_error" in NO_EVIDENCE
+    assert "needs_accelerator" in NO_EVIDENCE
+    assert "missing_deps" in NO_EVIDENCE
+    # A solution that will not import is the other non-obvious case, and it
+    # goes the other way: the starter imports by contract, so the breakage came
+    # from whatever wrote the file, and that is a measurement of it.
+    assert "solution_error" not in NO_EVIDENCE
+    assert "solution_error" not in HARNESS_FAILURES
+    # A solution that ran and did not finish is the one non-obvious case: that
+    # is the solution failing, not the harness, so it stays a measurement.
+    assert "timeout" not in NO_EVIDENCE
+    assert "timeout" not in HARNESS_FAILURES
+
+    with pytest.raises(ValueError, match="unclassified outcome status"):
+        Outcome(slug="x", passed=False, status="something_new", duration_s=0.0)
 
 
 # -- reading pytest's summary line ----------------------------------------
@@ -380,6 +552,103 @@ def test_the_run_table_renders(tmp_path):
     assert "laptop       100% (1/1)" in rendered
 
 
+# -- repeated draws --------------------------------------------------------
+#
+# The same model passed `softmax_stability` on one run and failed it on the
+# next, four hours apart, with the same prompt and the same settings. A single
+# sweep is one draw of a sampled process, so the only honest error bar is
+# several of them.
+
+
+def _draw(model: str, statuses: dict[str, bool], task_set: str = "v1") -> dict:
+    """A results document with a chosen outcome per task, for the aggregation."""
+    return {
+        "model": model,
+        "task_set": task_set,
+        "headline_tier": "laptop",
+        "pass_rate": sum(statuses.values()) / len(statuses),
+        "pass_rate_by_tier": {
+            "laptop": {
+                "pass_rate": sum(statuses.values()) / len(statuses),
+                "solved": sum(statuses.values()),
+                "measured": len(statuses),
+                "total": len(statuses),
+                "no_accelerator": 0,
+                "no_evidence": 0,
+            }
+        },
+        "tasks": [
+            {
+                "slug": slug,
+                "tier": "laptop",
+                "passed": passed,
+                "status": "passed" if passed else "failed",
+            }
+            for slug, passed in statuses.items()
+        ],
+    }
+
+
+def test_repeated_draws_are_grouped_by_model_and_task_set():
+    draws = [
+        _draw("claude-opus-5", {"a": True}),
+        _draw("claude-opus-5", {"a": False}),
+        _draw("claude-opus-5", {"a": True}, task_set="v2"),
+        _draw("claude-haiku-4-5", {"a": True}),
+    ]
+    groups = reporting.group_draws(draws)
+    assert sorted(groups) == [
+        ("claude-haiku-4-5", "v1", ("a",)),
+        ("claude-opus-5", "v1", ("a",)),
+        ("claude-opus-5", "v2", ("a",)),
+    ]
+    assert len(groups[("claude-opus-5", "v1", ("a",))]) == 2
+
+
+def test_a_one_task_probe_run_is_not_a_draw_of_the_full_sweep():
+    # `results/` fills up with single-task runs while an adapter is being
+    # debugged. Folded in with a real sweep they produce a spread that measures
+    # what was asked rather than how the model answered: six one-task runs and
+    # one eight-task run came out as "7 draws, 0% to 100%".
+    probe = _draw("claude-haiku-4-5", {"softmax_stability": False})
+    sweep = _draw("claude-haiku-4-5", {"softmax_stability": True, "bpe_merge_order": True})
+
+    groups = reporting.group_draws([probe, sweep])
+    assert len(groups) == 2
+    assert all(len(draws) == 1 for draws in groups.values())
+
+    printed = reporting.format_variance([probe, sweep])
+    assert "1 task(s) asked" in printed
+    assert "2 task(s) asked" in printed
+    assert "0% to 100%" not in printed
+
+
+def test_a_task_that_passes_some_draws_and_not_others_is_marked_as_split():
+    draws = [
+        _draw("claude-opus-5", {"softmax_stability": True, "bpe_merge_order": True}),
+        _draw("claude-opus-5", {"softmax_stability": False, "bpe_merge_order": True}),
+        _draw("claude-opus-5", {"softmax_stability": True, "bpe_merge_order": True}),
+    ]
+    printed = reporting.format_variance(draws)
+
+    assert "3 draw(s)" in printed
+    assert "softmax_stability" in printed and "2/3" in printed and "SPLIT" in printed
+    assert "bpe_merge_order" in printed and "3/3" in printed and "always" in printed
+    # The set rate is a range, not a point, and saying so is the entire purpose.
+    assert "50% to 100%" in printed
+
+
+def test_a_draw_that_produced_no_evidence_is_not_counted_as_a_failed_draw():
+    # Otherwise a dropped connection on the third draw would show up as the
+    # model being less reliable than it is, which is a fabricated error bar.
+    good = _draw("claude-opus-5", {"a": True})
+    dropped = _draw("claude-opus-5", {"a": False})
+    dropped["tasks"][0]["status"] = "adapter_error"
+
+    printed = reporting.format_variance([good, dropped])
+    assert "1/1" in printed
+
+
 def test_a_long_detail_is_clipped_to_keep_the_table_readable():
     clipped = reporting._clip("x" * 300)
     assert len(clipped) <= 58
@@ -443,6 +712,7 @@ def test_a_run_records_the_adapters_attempts_and_cost(tmp_path, monkeypatch):
     class FakeAdapter:
         max_attempts = 3
         usd_cost = 1.25
+        token_usage = {"input": 1000, "output": 200, "cache_read": 0, "cache_write": 0}
 
         def __call__(self, task, workdir):
             reference_solve(task, workdir)
@@ -466,6 +736,107 @@ def test_a_run_records_the_adapters_attempts_and_cost(tmp_path, monkeypatch):
     payload = reporting.load_payloads(tmp_path)[-1]
     assert payload["attempts"] == 3
     assert payload["usd_cost"] == 1.25
+    # The cost has to be checkable against something. A figure with no usage
+    # behind it cannot be told apart from a figure computed off a stale price.
+    assert payload["tokens"] == {
+        "input": 1000,
+        "output": 200,
+        "cache_read": 0,
+        "cache_write": 0,
+    }
+
+
+def test_repeating_a_run_writes_one_independent_result_per_draw(tmp_path):
+    from runner.cli import main
+
+    assert (
+        main(
+            [
+                "run",
+                "--model",
+                "reference",
+                "--tasks",
+                "softmax_stability",
+                "--repeat",
+                "2",
+                "--results",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
+    payloads = reporting.load_payloads(tmp_path)
+    assert len(payloads) == 2
+    # Each file is a complete run in its own right; the group only records that
+    # they were asked the same question.
+    groups = {payload["repeat"]["group"] for payload in payloads}
+    assert len(groups) == 1
+    assert sorted(payload["repeat"]["index"] for payload in payloads) == [1, 2]
+    assert all(payload["repeat"]["of"] == 2 for payload in payloads)
+    assert all(payload["pass_rate"] == 1.0 for payload in payloads)
+
+
+def test_a_single_run_carries_no_repeat_block(tmp_path):
+    from runner.cli import main
+
+    main(
+        [
+            "run",
+            "--model",
+            "reference",
+            "--tasks",
+            "softmax_stability",
+            "--results",
+            str(tmp_path),
+        ]
+    )
+    assert reporting.load_payloads(tmp_path)[-1]["repeat"] is None
+
+
+def test_each_repeat_gets_its_own_adapter_so_costs_do_not_accumulate(tmp_path, monkeypatch):
+    # An adapter accumulates spend across the tasks it solves. Reused across
+    # draws it would write a running total into every file, and the last draw
+    # would look several times as expensive as the first for the same work.
+    import adapters
+    from runner.cli import main
+
+    class CountingAdapter:
+        max_attempts = 1
+        token_usage = None
+
+        def __init__(self):
+            self.usd_cost = 0.0
+
+        def __call__(self, task, workdir):
+            self.usd_cost += 1.0
+            reference_solve(task, workdir)
+
+    monkeypatch.setitem(adapters.ADAPTERS, "counting", lambda model: CountingAdapter())
+    assert (
+        main(
+            [
+                "run",
+                "--model",
+                "counting",
+                "--tasks",
+                "softmax_stability",
+                "--repeat",
+                "3",
+                "--results",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
+    costs = [payload["usd_cost"] for payload in reporting.load_payloads(tmp_path)]
+    assert costs == [1.0, 1.0, 1.0]
+
+
+def test_repeat_must_be_at_least_one(capsys):
+    from runner.cli import main
+
+    assert main(["run", "--model", "reference", "--tasks", "softmax_stability", "--repeat", "0"]) == 2
+    assert "--repeat" in capsys.readouterr().err
 
 
 def test_the_control_run_reports_one_attempt_and_no_cost(tmp_path):
@@ -488,6 +859,9 @@ def test_the_control_run_reports_one_attempt_and_no_cost(tmp_path):
     payload = reporting.load_payloads(tmp_path)[-1]
     assert payload["attempts"] == 1
     assert payload["usd_cost"] is None
+    # The reference solver is a plain function: no calls, no tokens, and no
+    # zeros pretending to be a measurement.
+    assert payload["tokens"] is None
 
 
 # -- the Anthropic adapter -------------------------------------------------
@@ -590,3 +964,94 @@ def test_an_unpriced_model_reports_no_cost_rather_than_a_guess():
     from adapters.anthropic_api import price_of
 
     assert price_of("claude-not-a-model", FakeUsage(1000, 1000)) is None
+
+
+def test_the_dated_snapshot_an_alias_resolves_to_is_the_same_model():
+    from adapters.anthropic_api import same_model
+
+    # This is what the API actually answers with. Reading it as a substitution
+    # turns every run into an adapter_error and measures nothing.
+    assert same_model("claude-haiku-4-5", "claude-haiku-4-5-20251001")
+    assert same_model("claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001")
+
+
+def test_a_different_model_is_still_a_substitution():
+    from adapters.anthropic_api import same_model
+
+    assert not same_model("claude-haiku-4-5", "claude-opus-5")
+    # A prefix is not a snapshot. Only a trailing date is.
+    assert not same_model("claude-opus-4", "claude-opus-4-5")
+    assert not same_model("claude-opus-5", "claude-opus-5-fast")
+
+
+def test_a_dated_snapshot_is_priced_as_the_alias_it_resolves_to():
+    from adapters.anthropic_api import price_of
+
+    # Otherwise every live run reports usd_cost: null, which reads as "this
+    # model has no published price" rather than "the lookup missed".
+    assert price_of("claude-haiku-4-5-20251001", FakeUsage(1_000_000, 1_000_000)) == 6.0
+
+
+# -- the published costs ---------------------------------------------------
+
+
+def test_every_published_cost_reproduces_from_its_own_tokens():
+    # The arithmetic behind the leaderboard was checked once, by hand, in
+    # prose. That check stops running the moment it is written: a price table
+    # drifts, a file is edited, and nothing notices. This is the same sum as a
+    # command, over the files that are actually published.
+    sys.path.insert(0, str(REPO_ROOT))
+    from tools.check_cost import check
+
+    published = sorted((REPO_ROOT / "leaderboard").glob("*.json"))
+    assert published, "no published results to check"
+    for path in published:
+        verdict, detail = check(path)
+        assert verdict == "ok", f"{path.name}: {detail}"
+
+
+def test_a_cost_that_does_not_match_its_tokens_is_caught(tmp_path):
+    # A checker that has never rejected anything is not a checker.
+    sys.path.insert(0, str(REPO_ROOT))
+    from tools.check_cost import check
+
+    path = tmp_path / "tampered.json"
+    path.write_text(
+        json.dumps(
+            {
+                "model": "claude-opus-5",
+                "usd_cost": 0.99,
+                "tokens": {
+                    "input": 15858,
+                    "output": 18453,
+                    "cache_read": 0,
+                    "cache_write": 0,
+                },
+            }
+        )
+    )
+    verdict, detail = check(path)
+    assert verdict == "MISMATCH"
+    assert "0.540615" in detail
+
+
+def test_a_cost_with_no_tokens_behind_it_is_unverifiable_rather_than_fine(tmp_path):
+    sys.path.insert(0, str(REPO_ROOT))
+    from tools.check_cost import check
+
+    path = tmp_path / "trust_me.json"
+    path.write_text(json.dumps({"model": "claude-opus-5", "usd_cost": 0.54}))
+    verdict, _ = check(path)
+    assert verdict == "UNCHECKABLE"
+
+
+def test_nothing_published_was_billed_at_a_cache_rate():
+    # The cache multipliers are the one part of the price arithmetic no live
+    # call has ever exercised: this adapter sends each task once, as its own
+    # prompt, so there is no prefix to reuse and the two cache counts are zero
+    # by construction. Saying that is only worth anything if the published
+    # files agree, so this is where the claim is checked rather than asserted.
+    for path in sorted((REPO_ROOT / "leaderboard").glob("*.json")):
+        tokens = json.loads(path.read_text())["tokens"]
+        assert tokens["cache_read"] == 0, path.name
+        assert tokens["cache_write"] == 0, path.name
