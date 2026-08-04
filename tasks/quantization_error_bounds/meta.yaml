@@ -1,0 +1,15 @@
+slug: quantization_error_bounds
+version: 1
+category: numerics
+difficulty: 4
+probes: >
+  Whether the affine quantization arithmetic is right end to end: the signed
+  range for symmetric and the unsigned one for asymmetric, a range widened to
+  include zero so that zero round-trips exactly, a zero point derived rather
+  than guessed, per-channel parameters reduced over every axis but the channel
+  axis, and a round trip that stays inside half a scale at every bit width.
+time_limit_s: 90
+requires_gpu: false
+deps: [numpy]
+added: 2026-07-27
+frozen_set: v1
