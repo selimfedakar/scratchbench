@@ -58,12 +58,14 @@ Python is Anaconda 3.10 at `/Users/selimfedakar/anaconda3/bin/python3`.
 | `TASK_FORMAT.md` | the task contract. Also locked. Read before writing any task. |
 | `tasks/<slug>/` | one task: `meta.yaml`, `prompt.md`, `starter/`, `hidden_tests/`, `reference/` |
 | `runner/tasks.py` | task discovery and `meta.yaml` validation |
-| `runner/sandbox.py` | temp workdir assembly, seeding, timeout, pytest invocation |
+| `runner/sandbox.py` | temp workdir assembly, seeding, timeout, pytest invocation, **and `STATUSES`: the one table saying which outcomes count as evidence** |
 | `runner/cli.py` | `scratchbench run` / `report` / `validate` |
 | `runner/report.py` | results JSON schema, aggregation, the printed table |
-| `adapters/` | model adapters. `reference.py` is real; the rest are skeletons. |
+| `adapters/` | model adapters. `reference.py` and `anthropic_api.py` are real; the OpenAI one is a skeleton class in `model_api.py`, not its own file. |
+| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the accelerated tier's evidence) and `check_cost.py` (every published cost, re-derived from its tokens) |
 | `results/` | one JSON per run, gitignored except `.gitkeep` |
 | `leaderboard/` | published results, checked in by hand |
+| `notes/` | the author's Turkish study notes. Gitignored, never published, never copied into a tracked file. |
 
 ## How a run works
 
@@ -125,6 +127,17 @@ writing the prompt last means you are describing something that exists.
   dict/set iteration order.
 - **Numeric tolerances carry a comment justifying the number.** `atol=1e-9`
   with no reason is a future flake.
+- **An outcome that produced no evidence is never a zero.** Missing hardware, a
+  missing optional dependency, an adapter that never returned a gradeable file,
+  tests that could not be collected: none of them scored the solution, so none
+  of them enters a rate. The classification lives in exactly one place,
+  `STATUSES` in `runner/sandbox.py`, and everything derives from it. This has
+  now been got wrong twice (L11, L20), both times because a second list existed
+  somewhere. Do not write a second list.
+- **A published number is one draw, not a converged value.** The same model on
+  the same task passed once and failed once. One attempt per task is still the
+  rule, because a retry with feedback measures the scaffolding — but a single
+  sweep is a sample, and any leaderboard row has to be labelled as one (L19).
 - **New dependencies need a written justification** in the task's `meta.yaml`
   `deps` and in the session report. Today: `numpy` everywhere, `torch` for
   `grad_accumulation` only — gradient equivalence cannot be measured without
@@ -136,7 +149,11 @@ writing the prompt last means you are describing something that exists.
   commands to `COMMITS.md`, one file per commit, and stop there.
 - **Atomic commits: one file per commit.** No exceptions.
 - **No AI attribution anywhere** — commits, comments, docs, none of it.
-- **English only** in every source file and document in this repository.
+- **English only** in every source file and document in this repository. The
+  single exception is `notes/`, which holds the author's Turkish study and
+  speaking notes, is gitignored, and must stay that way. It is kept beside the
+  project so it is not lost, never published. Never move its content into a
+  tracked file.
 - **A task is not "done" until both halves of L2 are pasted** (see above).
 
 ## Session journal and lessons
@@ -186,39 +203,104 @@ folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
 
-## State as of 2026-07-28 (verify before trusting)
+## State as of 2026-08-03, session 07 (verify before trusting)
 
-- **Not a git repository yet.** `git init` is the first line of `COMMITS.md`,
-  which now holds six blocks, one file per commit, waiting for Selim. The
-  public repository `selimfedakar/scratchbench` does not exist yet.
-- Tasks: **nine — eight L2 verified on the laptop tier, one unvalidated.**
-  `fused_rmsnorm_kernel` (kernels, difficulty 4, tier `accelerated`,
-  `accelerator: cuda`, Triton, 25 hidden tests) is written and has **never
-  run**: no CUDA device here. It is `frozen_set: unvalidated`, out of the
-  leaderboard, and stays there until its reference passes on hardware, its
-  untouched starter fails cleanly, and its five mutants are caught. The
-  mutation script lives outside the repository; the three open questions are
-  listed in `docs/sessions/05`.
-- Adapters: `anthropic` is **real** (`adapters/anthropic_api.py`) —
-  one call per task, streamed, JSON-schema-constrained to the task's own
-  filenames, no server-side fallbacks, and anything that is not a measurement
-  (refusal, truncation, model substitution) raises into `adapter_error`.
-  Verified **offline only**: eight tests cover the prompt, the write
-  allowlist and the cost arithmetic. **No live API request has been made.**
-  The SDK is an extra: `pip install 'scratchbench[anthropic]'`. `openai` is
-  still a skeleton.
-- Results now carry `attempts` and `usd_cost` off the adapter, plus `measured`
-  and `not_measured`. Outcomes with no evidence are kept out of every rate; a
-  tier with nothing measured reports `pass_rate: null`, not `0`.
+Everything in the older block below still holds except where this one contradicts
+it. Session 07 changed no tasks and audited the arithmetic instead.
+
+- **The headline `pass_rate` is one tier, and it is named in the file.**
+  `HEADLINE_TIER` in `runner/report.py`, `headline_tier` in the payload,
+  `headline_of()` for anything that renders a row. It used to average whatever
+  tiers a run measured, which could not fire on a machine with no GPU and would
+  have fired on the first `--tier all` sweep on the rented box (L23).
+  `RESULTS_VERSION` is **2**; version 1 files were all laptop-only and read
+  correctly without a `headline_tier`.
+- **`solution_error` is a new status: evidence, and a failure.** A graded run
+  that will not collect is attributed by re-running the hidden tests against the
+  untouched starter. Starter collects and fails properly → the solution broke it
+  → `solution_error`. Starter cannot collect either → the task is broken →
+  `collection_error`, unchanged. A model that emitted unparseable Python used to
+  drop out of the denominator (L22).
+- **`--repeat N` and `report --variance`.** N independent sweeps, one complete
+  results file each, `repeat: {group, index, of}` inside. Not retries: no draw
+  sees another's results and `max_attempts` is still 1. Adapters are built per
+  sweep or the cost accumulates across draws; the draw index is in the filename
+  or draws inside the same second overwrite each other.
+- **`tools/check_cost.py`** re-derives every published `usd_cost` from the
+  tokens beside it, shares `price_from_counts` with the adapter, and runs in CI.
+  Both published files reproduce exactly. Cache counts are zero in both, by
+  construction and now by test: the adapter sends each task as its own prompt,
+  so there is no prefix to reuse.
+- **`docs/V2_DESIGN.md`** is the design for the set that replaces v1 as the
+  headline: what discriminates at the top, eight scored candidates, the two to
+  write first (`speculative_decoding_verify`, `flash_attention_backward`), and
+  the admission rule that fixes L21 — a task is calibrated against models before
+  it enters a frozen set. **The calibration machinery is deliberately not built
+  yet** (L11: infrastructure before its first user).
+- Harness suite: **77 passed** here, up from 61.
+- Still open, and neither is blocked by code: no model has been asked an
+  accelerated task, and v1 does not discriminate at the top.
+
+## State as of 2026-08-02 (verify before trusting)
+
+- **The repository is public and live**, at `selimfedakar/scratchbench`.
+  Blocks 0 through 5 of `COMMITS.md` have run; **Blocks 7 through 14 are
+  pending** and hold everything below that is not yet committed.
+- **CI on `main` is red, and every red cross is correct.**
+  `tests/test_runner.py` is committed and imports `adapters.anthropic_api`,
+  which is still in the commit queue, so `pytest` exits 2 at collection. The
+  cause is the push cadence, not the history: one file per commit means most
+  tips are incomplete, and the commits were pushed one at a time instead of
+  once at the end. Do not rewrite history over this. Run the pending blocks,
+  then **push once** (`docs/LESSONS.md` L17).
+- Tasks: **nine, all nine L2 verified and all nine in `frozen_set: v1`.**
+  Eight on the laptop tier; `fused_rmsnorm_kernel` (kernels, difficulty 4,
+  `accelerated`, `accelerator: cuda`, Triton, **24** hidden tests) passed on an
+  RTX A4500 on 2026-08-02 — reference 24 passed, untouched starter 24 failed,
+  six mutants out of six caught. Transcript in `docs/sessions/06`.
+- Its first hardware run found two real holes, both fixed and both worth
+  reading before writing another task: the mutant for the claim the task is
+  named after survived (L14), and two tests could not fail against the
+  untouched starter (L15).
+- Adapters: `anthropic` is **real and exercised against the live API**. One
+  call per task, streamed, JSON-schema-constrained to the task's own filenames,
+  no server-side fallbacks, and anything that is not a measurement raises into
+  `adapter_error`. **It sets no sampling, thinking or effort knobs** — every
+  model is asked at its own defaults, deliberately, so two rows of the same
+  leaderboard mean the same thing. An alias answered by its dated snapshot is
+  the same model, in both the identity check and the price lookup (L16). The
+  SDK is an extra: `pip install 'scratchbench[anthropic]'`. `openai` is still a
+  skeleton.
+- Results carry `attempts`, `usd_cost` and **`tokens`** (input, output, cache
+  read, cache write) off the adapter, plus `measured` and `not_measured`. The
+  tokens are there so the cost can be reproduced rather than trusted (L18), and
+  it checks out: `(1182 × 1 + 1003 × 5) / 1e6 = 0.006197`, exactly what the file
+  says.
+- **`runner/sandbox.py` holds one table, `STATUSES`, that classifies every
+  outcome status: is it evidence, and does it break the run.** `NO_EVIDENCE`,
+  `HARNESS_FAILURES` and the printed labels all derive from it, and
+  `Outcome.__post_init__` refuses an unclassified status. This exists because
+  the same idea used to live in two files with two different memberships, and
+  the gap published `pass_rate: 0.0` for a sweep that never reached the model
+  (L20). **Do not re-introduce a second list.**
 - Runner: **L2** — `validate --tier all` reports 8 ok and 1 not checked here;
   `run --model reference --tasks all --tier all` reports laptop 100% (8/8) and
-  accelerated not run, in 4.5s. Its own suite: **L1** — 56 passed in 16.64s.
-- CI: the laptop job is unchanged and still **L0** (no remote yet). A second,
-  manual `accelerated` job targets a `[self-hosted, gpu]` runner and asserts
-  `torch.cuda.is_available()` before validating anything — no such runner
-  exists, so it has never run either.
-- Next: run `fused_rmsnorm_kernel` on hardware (Selim is renting a GPU), then
-  the first real model sweep and the first leaderboard entry.
+  accelerated not run, in 5.6s. Its own suite: **L1** — 61 passed here,
+  58 passed and 1 skipped on Linux with a CUDA torch (before the last two tests).
+- First graded model runs: `claude-haiku-4-5` on `softmax_stability` twice.
+  Run one passed all 29 tests; run two failed three of them. **Same model, same
+  task, same settings.** The harness is deterministic and the model is not, so a
+  sweep is one draw and the leaderboard has to say so (L19). One attempt per
+  task stays: retries measure the scaffolding, repeated runs measure variance,
+  and they are different things.
+- `tools/` holds the two scripts the accelerated tier's evidence comes from:
+  `mutate_rmsnorm.py` and `verify_accelerated.sh`. They are in the repository
+  because a check nobody can re-run is a claim.
+- CI: the laptop job is real. **The accelerated job is deleted**, deliberately: a
+  self-hosted GPU runner on a public repository can be reached by a pull request
+  that edits `runs-on`. `tools/verify_accelerated.sh` replaces it and
+  `CONTRIBUTING.md` says so.
+- Next: the first full eight-task sweep and the first leaderboard entry.
 
 - `README.md` and `TASK_FORMAT.md`: design locked. The laptop task set is
   unchanged and still L2: `softmax_stability` 29 tests · `bpe_merge_order` 30 ·
