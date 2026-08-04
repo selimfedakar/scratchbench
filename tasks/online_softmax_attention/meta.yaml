@@ -1,0 +1,15 @@
+slug: online_softmax_attention
+version: 1
+category: attention
+difficulty: 5
+probes: >
+  Whether the model can stream a softmax: an associative merge of partial
+  attention states that rescales both the denominator and the numerator when
+  the running maximum moves, survives a block that is entirely masked away
+  without producing NaN, and returns the same output and logsumexp for every
+  block size including those that do not divide the key count.
+time_limit_s: 120
+requires_gpu: false
+deps: [numpy]
+added: 2026-07-27
+frozen_set: v1
