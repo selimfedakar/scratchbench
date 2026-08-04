@@ -109,14 +109,27 @@ the model.
 
 Binary. All hidden tests pass, or the task is failed.
 
+A solution that will not import, or that renames what the hidden tests import,
+is a failed task and not an absence of evidence. The starter imports cleanly by
+contract, so a graded directory that cannot be collected was broken by whatever
+wrote it. The harness confirms this rather than assuming it: on a collection
+error it re-runs the hidden tests against the untouched starter, and only calls
+the task broken if they fail there too.
+
 The suite reports:
 
-- `pass_rate` — fraction of tasks solved
-- `pass_rate_by_category` — where a model is strong and where it is not
+- `pass_rate` — fraction of solved tasks **on the headline tier**, named in the
+  file as `headline_tier`. It is never an average across tiers; the others are
+  reported in full beside it under `pass_rate_by_tier`
+- `pass_rate_by_category` — where a model is strong and where it is not, within
+  that same tier
 - `attempts` — how many edit-and-run cycles the harness used
-- `wall_clock_s` and `usd_cost` — because a model that solves everything in
-  forty minutes and eleven dollars is a different tool than one that solves the
-  same set in ninety seconds
+- `repeat` — which draw this is, when the sweep was repeated. Independent runs,
+  not retries: no draw sees another's results
+- `wall_clock_s`, `usd_cost` and the `tokens` the cost was computed from —
+  because a model that solves everything in forty minutes and eleven dollars is
+  a different tool than one that solves the same set in ninety seconds, and a
+  cost nobody can re-derive is a cost you are trusting
 
 ## Contributing a task
 
