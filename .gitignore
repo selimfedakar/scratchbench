@@ -12,5 +12,10 @@ venv/
 results/*.json
 !results/.gitkeep
 
+# The author's Turkish study and speaking notes. Kept beside the project so
+# they are not lost, never published. Nothing in here is ever moved into a
+# tracked file.
+notes/
+
 # macOS
 .DS_Store
