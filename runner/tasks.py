@@ -7,7 +7,8 @@ does not produce a lower score — it produces a wrong one.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -47,9 +48,42 @@ REQUIRED_META_KEYS = {
     "frozen_set",
 }
 
+#: A numbered frozen set from v2 onward is calibrated against models before
+#: anything enters it. `v1` is exempt because it predates the rule and is
+#: published as what it was: difficulty numbers assigned by how hard each task
+#: felt to write, which is a measurement of the author rather than of the task
+#: (docs/LESSONS.md L21). Anything else is a task that is not in a headline set:
+#: `unvalidated` for one that is not finished, `warmup` for one that is finished
+#: and solved by everything at the top, and whatever the harness's own tests use.
+CALIBRATED_SET = re.compile(r"^v(\d+)$")
+FIRST_CALIBRATED_SET = 2
+
+#: Fewer draws than this cannot say much about a sampled process: the same
+#: model on the same task has passed once and failed once (L19).
+CALIBRATION_MIN_DRAWS = 5
+
+REQUIRED_CALIBRATION_KEYS = {"model", "draws", "passed", "date"}
+
 
 class TaskError(Exception):
     """A task directory does not satisfy the contract."""
+
+
+@dataclass(frozen=True)
+class Calibration:
+    """What one model scored on this task, over several independent draws."""
+
+    model: str
+    draws: int
+    passed: int
+    date: str
+
+    @property
+    def rate(self) -> float:
+        return self.passed / self.draws
+
+    def __str__(self) -> str:
+        return f"{self.model} {self.passed}/{self.draws}"
 
 
 @dataclass(frozen=True)
@@ -69,6 +103,7 @@ class Task:
     path: Path
     tier: str = "laptop"
     accelerator: str | None = None
+    calibration: tuple[Calibration, ...] = field(default_factory=tuple)
 
     @property
     def starter_dir(self) -> Path:
@@ -161,6 +196,9 @@ def load_task(path: Path) -> Task:
             f"{meta_path}: time_limit_s must be 1..{MAX_TIME_LIMIT_S}, got {meta['time_limit_s']}"
         )
 
+    calibration = _load_calibration(meta_path, meta.get("calibration"))
+    _check_admission(meta_path, str(meta["frozen_set"]), calibration)
+
     task = Task(
         slug=slug,
         version=int(meta["version"]),
@@ -175,9 +213,81 @@ def load_task(path: Path) -> Task:
         path=path,
         tier=tier,
         accelerator=accelerator,
+        calibration=calibration,
     )
     _check_layout(task)
     return task
+
+
+def _load_calibration(meta_path: Path, raw) -> tuple[Calibration, ...]:
+    """Parse the optional `calibration:` block, refusing anything unreadable."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise TaskError(f"{meta_path}: calibration must be a list of entries")
+
+    entries = []
+    for index, item in enumerate(raw):
+        where = f"{meta_path}: calibration[{index}]"
+        if not isinstance(item, dict):
+            raise TaskError(f"{where}: expected a mapping")
+        missing = REQUIRED_CALIBRATION_KEYS - item.keys()
+        if missing:
+            raise TaskError(f"{where}: missing keys {sorted(missing)}")
+
+        try:
+            draws, passed = int(item["draws"]), int(item["passed"])
+        except (TypeError, ValueError) as error:
+            raise TaskError(f"{where}: draws and passed must be integers") from error
+        if draws < 1:
+            raise TaskError(f"{where}: draws must be at least 1, got {draws}")
+        if not 0 <= passed <= draws:
+            raise TaskError(f"{where}: passed must be 0..{draws}, got {passed}")
+
+        entries.append(
+            Calibration(
+                model=str(item["model"]),
+                draws=draws,
+                passed=passed,
+                date=str(item["date"]),
+            )
+        )
+    return tuple(entries)
+
+
+def _check_admission(meta_path: Path, frozen_set: str, calibration: tuple[Calibration, ...]) -> None:
+    """The rule that stops a set being calibrated against the author's intuition.
+
+    v1's difficulty numbers were assigned by how hard each task felt to write,
+    and then a frontier model solved every one of them on the first attempt
+    (docs/LESSONS.md L21). So from v2 onward a task earns its place by having
+    been asked of models, and a task that everything solves every time is
+    refused: it costs a sweep and tells nobody anything. It can live in a
+    warm-up set. It cannot be in the headline.
+    """
+    numbered = CALIBRATED_SET.match(frozen_set)
+    if not numbered or int(numbered.group(1)) < FIRST_CALIBRATED_SET:
+        return
+
+    if not calibration:
+        raise TaskError(
+            f"{meta_path}: frozen_set '{frozen_set}' needs a calibration block — no task "
+            "enters a calibrated set on the strength of a difficulty number somebody "
+            "assigned by feel"
+        )
+
+    best = max(calibration, key=lambda entry: (entry.rate, entry.draws))
+    if best.passed == best.draws:
+        raise TaskError(
+            f"{meta_path}: {best.model} passed all {best.draws} draws, so this task cannot "
+            f"be in '{frozen_set}' — a task everything solves adds cost and no information"
+        )
+
+    if not any(entry.draws >= CALIBRATION_MIN_DRAWS for entry in calibration):
+        raise TaskError(
+            f"{meta_path}: no calibration entry has {CALIBRATION_MIN_DRAWS} draws or more, "
+            "and fewer than that cannot tell a hard task from an unlucky one"
+        )
 
 
 def _check_layout(task: Task) -> None:
@@ -223,21 +333,44 @@ def discover_tasks(tasks_root: Path) -> list[Task]:
     ]
 
 
-def select_tasks(tasks_root: Path, spec: str, tier: str = "all") -> list[Task]:
+def select_tasks(
+    tasks_root: Path, spec: str, tier: str = "all", frozen_set: str = "all"
+) -> list[Task]:
     """Resolve an `--tasks` argument: `all`, or a comma-separated list of slugs.
 
-    `tier` filters the result to one tier. Naming a task explicitly overrides
-    the filter — asking for a slug and being handed nothing is worse than
-    running it.
+    `tier` filters the result to one tier and `frozen_set` to one published set.
+    Naming a task explicitly overrides both — asking for a slug and being handed
+    nothing is worse than running it.
+
+    The frozen-set filter exists because the laptop tier stopped being one set.
+    `warmup` holds tasks that every frontier model solves, so a sweep over every
+    laptop task now spans two sets and its `pass_rate` is an average across them,
+    which is the same mistake as averaging two tiers (L23) one axis over. There
+    is no default filtering here: a run that asks for everything gets everything
+    and its results file records `task_set` as the list it actually covered, so
+    the blend is visible rather than implied.
     """
     tasks = discover_tasks(tasks_root)
 
     if spec.strip() == "all":
-        if tier == "all":
-            return tasks
-        if tier not in TIERS:
-            raise TaskError(f"unknown tier '{tier}', expected one of {sorted(TIERS)} or 'all'")
-        return [task for task in tasks if task.tier == tier]
+        selected = tasks
+        if tier != "all":
+            if tier not in TIERS:
+                raise TaskError(
+                    f"unknown tier '{tier}', expected one of {sorted(TIERS)} or 'all'"
+                )
+            selected = [task for task in selected if task.tier == tier]
+        if frozen_set != "all":
+            # Checked against every task rather than the tier-filtered ones, so
+            # `--set v1 --tier accelerated` says "no accelerated task is in v1"
+            # by returning nothing, rather than "there is no such set".
+            known = sorted({task.frozen_set for task in tasks})
+            if frozen_set not in known:
+                raise TaskError(
+                    f"unknown frozen set '{frozen_set}', expected one of {known} or 'all'"
+                )
+            selected = [task for task in selected if task.frozen_set == frozen_set]
+        return selected
 
     wanted = [slug.strip() for slug in spec.split(",") if slug.strip()]
     by_slug = {task.slug: task for task in tasks}
