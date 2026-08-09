@@ -1,0 +1,171 @@
+{
+  "results_version": 2,
+  "harness_version": "0.1.0",
+  "model": "claude-haiku-4-5",
+  "run_at": "2026-08-09T06:27:38+00:00",
+  "task_set": "v1",
+  "headline_tier": "laptop",
+  "pass_rate": 0.5,
+  "measured": 8,
+  "not_measured": 0,
+  "pass_rate_by_category": {
+    "attention": 0.6666666666666666,
+    "data": 1.0,
+    "numerics": 0.5,
+    "tokenization": 0.0,
+    "training": 0.0
+  },
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": 0.5,
+      "solved": 4,
+      "measured": 8,
+      "total": 8,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "attention": 0.6666666666666666,
+        "data": 1.0,
+        "numerics": 0.5,
+        "tokenization": 0.0,
+        "training": 0.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-haiku-4-5-20260809T062350",
+    "index": 3,
+    "of": 5
+  },
+  "wall_clock_s": 75.85,
+  "usd_cost": 0.072333,
+  "tokens": {
+    "input": 12103,
+    "output": 12046,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "attention_causal_mask",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 2,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.3,
+      "counts": {
+        "passed": 26
+      },
+      "detail": ""
+    },
+    {
+      "slug": "bpe_merge_order",
+      "category": "tokenization",
+      "tier": "laptop",
+      "difficulty": 2,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 0.22,
+      "counts": {
+        "failed": 1,
+        "passed": 29
+      },
+      "detail": ""
+    },
+    {
+      "slug": "grad_accumulation",
+      "category": "training",
+      "tier": "laptop",
+      "difficulty": 3,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 2.78,
+      "counts": {
+        "failed": 17,
+        "passed": 10
+      },
+      "detail": ""
+    },
+    {
+      "slug": "kv_cache_equivalence",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 3,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.35,
+      "counts": {
+        "passed": 21
+      },
+      "detail": ""
+    },
+    {
+      "slug": "online_softmax_attention",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 5,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 0.49,
+      "counts": {
+        "failed": 16,
+        "passed": 41
+      },
+      "detail": ""
+    },
+    {
+      "slug": "quantization_error_bounds",
+      "category": "numerics",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.38,
+      "counts": {
+        "passed": 65
+      },
+      "detail": ""
+    },
+    {
+      "slug": "sharded_dataloader",
+      "category": "data",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.27,
+      "counts": {
+        "passed": 53
+      },
+      "detail": ""
+    },
+    {
+      "slug": "softmax_stability",
+      "category": "numerics",
+      "tier": "laptop",
+      "difficulty": 1,
+      "task_version": 1,
+      "passed": false,
+      "status": "solution_error",
+      "duration_s": 0.54,
+      "counts": {
+        "error": 2
+      },
+      "detail": "SyntaxError: unmatched '}'"
+    }
+  ]
+}
