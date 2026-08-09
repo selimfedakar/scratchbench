@@ -15,18 +15,15 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 
 ## Pending
 
-### Session 08 — the five draws, and what they say
+### Session 09 — the accelerated tier answers
 
-Ten commits, ten pushes, a minute apart. Every tree here is green, so unlike the
-replay this needs no ordering care: the results files are self-contained and the
-documents are read by no CI step. Ten workflow runs, ten green ticks.
+Twenty-two commits, twenty-two pushes, a minute apart. Every tree here is green:
+the results files are self-contained, the documents are read by no CI step, and
+`tools/check_cost.py` is happy at every point because each new file re-derives
+on its own. Twenty-two green ticks, and about twenty-one minutes of `sleep`.
 
-No force this time. `origin/main` and `main` are the same commit, so every push
-is a fast-forward.
-
-Safe to run while a sweep is going in another terminal. The sweep writes to
-`results/`, which `.gitignore` covers, and none of the ten files below is
-touched by it.
+No force. `origin/main` and `main` are the same commit, so every push is a
+fast-forward.
 
 ```bash
 cd ~/scratchbench
@@ -42,15 +39,27 @@ while IFS='|' read -r file message; do
   git push origin main
   echo "  $n pushed: $message"
 done <<'QUEUE'
-leaderboard/claude-opus-5-20260809-draw1.json|leaderboard: claude-opus-5 on task set v1, draw 1 of 5
-leaderboard/claude-opus-5-20260809-draw2.json|leaderboard: claude-opus-5 on task set v1, draw 2 of 5
-leaderboard/claude-opus-5-20260809-draw3.json|leaderboard: claude-opus-5 on task set v1, draw 3 of 5
-leaderboard/claude-opus-5-20260809-draw4.json|leaderboard: claude-opus-5 on task set v1, draw 4 of 5
-leaderboard/claude-opus-5-20260809-draw5.json|leaderboard: claude-opus-5 on task set v1, draw 5 of 5
-leaderboard/README.md|leaderboard: five draws, and the error bar moves to the column that needed one
-docs/LESSONS.md|Lessons: the error bar went on the column that did not need it
-docs/sessions/08-five-draws.md|Journal 08: five draws
-README.md|README: the top row is five draws now, and it is a ceiling
+leaderboard/claude-haiku-4-5-20260809-draw1.json|leaderboard: claude-haiku-4-5 on the laptop tier, draw 1 of 5
+leaderboard/claude-haiku-4-5-20260809-draw2.json|leaderboard: claude-haiku-4-5 on the laptop tier, draw 2 of 5
+leaderboard/claude-haiku-4-5-20260809-draw3.json|leaderboard: claude-haiku-4-5 on the laptop tier, draw 3 of 5
+leaderboard/claude-haiku-4-5-20260809-draw4.json|leaderboard: claude-haiku-4-5 on the laptop tier, draw 4 of 5
+leaderboard/claude-haiku-4-5-20260809-draw5.json|leaderboard: claude-haiku-4-5 on the laptop tier, draw 5 of 5
+leaderboard/accelerated-claude-opus-5-20260809-draw1.json|leaderboard: claude-opus-5 on the accelerated tier, draw 1 of 5
+leaderboard/accelerated-claude-opus-5-20260809-draw2.json|leaderboard: claude-opus-5 on the accelerated tier, draw 2 of 5
+leaderboard/accelerated-claude-opus-5-20260809-draw3.json|leaderboard: claude-opus-5 on the accelerated tier, draw 3 of 5
+leaderboard/accelerated-claude-opus-5-20260809-draw4.json|leaderboard: claude-opus-5 on the accelerated tier, draw 4 of 5
+leaderboard/accelerated-claude-opus-5-20260809-draw5.json|leaderboard: claude-opus-5 on the accelerated tier, draw 5 of 5
+leaderboard/accelerated-claude-haiku-4-5-20260809-draw1.json|leaderboard: claude-haiku-4-5 on the accelerated tier, draw 1 of 5
+leaderboard/accelerated-claude-haiku-4-5-20260809-draw2.json|leaderboard: claude-haiku-4-5 on the accelerated tier, draw 2 of 5
+leaderboard/accelerated-claude-haiku-4-5-20260809-draw3.json|leaderboard: claude-haiku-4-5 on the accelerated tier, draw 3 of 5
+leaderboard/accelerated-claude-haiku-4-5-20260809-draw4.json|leaderboard: claude-haiku-4-5 on the accelerated tier, draw 4 of 5
+leaderboard/accelerated-claude-haiku-4-5-20260809-draw5.json|leaderboard: claude-haiku-4-5 on the accelerated tier, draw 5 of 5
+leaderboard/README.md|leaderboard: both tiers, five draws each, and the failure shape beside the rate
+docs/LESSONS.md|Lessons: a rate that put two failures in the wrong order
+docs/sessions/09-the-accelerated-tier-answers.md|Journal 09: the accelerated tier answers
+docs/V2_DESIGN.md|Design: one task already discriminates, and it is on the other tier
+README.md|README: the accelerated tier is the part still measuring at the top
+CLAUDE.md|Update state after the first accelerated model runs
 COMMITS.md|Update commit queue
 QUEUE
 ```
@@ -61,15 +70,20 @@ Then confirm:
 cd ~/scratchbench
 
 git status --porcelain          # expect: empty
-git log --oneline | wc -l       # expect 100
+git log --oneline | wc -l       # expect 122
 python -m pytest -q             # expect 78 passed
-python tools/check_cost.py      # expect 7 file(s) checked
+python tools/check_cost.py      # expect 22 file(s) checked
 gh run list --limit 3           # expect success
 ```
 
 ---
 
 ## Committed
+
+### 2026-08-09 — session 08, ten commits
+
+The five Opus draws on the laptop tier, the leaderboard page rewritten around
+them, journal 08, and L26. Ten commits, ten pushes a minute apart, all green.
 
 ### 2026-08-09 — the replay, 45 commits, and CI green
 
