@@ -27,7 +27,7 @@ def _starter_solve(task, workdir) -> None:
 
 
 def command_list(args: argparse.Namespace) -> int:
-    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier)
+    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier, args.set)
     rows = [
         [
             task.slug,
@@ -36,13 +36,18 @@ def command_list(args: argparse.Namespace) -> int:
             str(task.difficulty),
             f"{task.time_limit_s}s",
             ", ".join(task.deps) or "-",
-            reporting._clip(task.probes, 60),
+            task.frozen_set,
+            # Difficulty is an opinion until models have been asked; this is
+            # the column that turns it into a measurement.
+            " · ".join(str(entry) for entry in task.calibration) or "-",
+            reporting._clip(task.probes, 50),
         ]
         for task in tasks
     ]
     print(
         reporting._table(
-            ["task", "category", "tier", "diff", "limit", "deps", "probes"], rows
+            ["task", "category", "tier", "diff", "limit", "deps", "set", "calibration", "probes"],
+            rows,
         )
     )
     return 0
@@ -58,7 +63,7 @@ def command_validate(args: argparse.Namespace) -> int:
     """
     from adapters.reference import solve as reference_solve
 
-    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier)
+    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier, args.set)
     rows: list[list[str]] = []
     broken = 0
     checked = 0
@@ -135,11 +140,20 @@ def _one_sweep(args, tasks, repeat: dict | None) -> tuple[dict, list[Outcome]]:
     # first.
     solve = resolve(args.model)
 
+    # Kept workdirs are named after the task, so several draws of the same task
+    # land on the same directory and only the last survives. The failure shape
+    # is the thing repeated draws exist to show — 1 test out of 24 and 24 out of
+    # 24 are the same verdict and completely different information — so each
+    # draw gets its own directory rather than the right to overwrite the others.
+    keep = args.keep
+    if keep is not None and repeat is not None:
+        keep = keep / f"draw{repeat['index']}"
+
     outcomes: list[Outcome] = []
     started = time.perf_counter()
     for task in tasks:
         print(f"  {task.slug} ... ", end="", flush=True)
-        outcome = grade(task, solve, keep_workdir=args.keep)
+        outcome = grade(task, solve, keep_workdir=keep)
         outcomes.append(outcome)
         mark = reporting.MARKS.get(outcome.status, outcome.status)
         print(f"{mark}  ({reporting._clip(outcome.summary())})")
@@ -168,7 +182,7 @@ def command_run(args: argparse.Namespace) -> int:
         print("scratchbench: --repeat must be at least 1", file=sys.stderr)
         return 2
 
-    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier)
+    tasks = select_tasks(TASKS_ROOT, args.tasks, args.tier, args.set)
 
     # One identifier shared by every draw in this invocation, so the files can
     # be grouped afterwards without guessing from timestamps.
@@ -238,6 +252,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    def add_set(parser_: argparse.ArgumentParser) -> None:
+        parser_.add_argument(
+            "--set",
+            default="all",
+            help=(
+                "which frozen set to include. Default 'all'. The laptop tier "
+                "holds more than one published set now — `warmup` is where a "
+                "task goes when every frontier model solves it — so a sweep "
+                "over everything averages across them, and a leaderboard row "
+                "wants one set."
+            ),
+        )
+
     def add_tier(parser_: argparse.ArgumentParser) -> None:
         parser_.add_argument(
             "--tier",
@@ -253,6 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
     listing = subparsers.add_parser("list", help="show the task set")
     listing.add_argument("--tasks", default="all", help="'all' or a comma-separated list of slugs")
     add_tier(listing)
+    add_set(listing)
     listing.set_defaults(func=command_list, tier="all")
 
     validate = subparsers.add_parser(
@@ -260,6 +288,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate.add_argument("--tasks", default="all")
     add_tier(validate)
+    add_set(validate)
     validate.add_argument("--verbose", action="store_true", help="print pytest output for failures")
     validate.set_defaults(func=command_validate)
 
@@ -267,6 +296,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--model", required=True, help="model id, or 'reference' for the control run")
     run.add_argument("--tasks", default="all")
     add_tier(run)
+    add_set(run)
     run.add_argument("--results", type=Path, default=RESULTS_ROOT)
     run.add_argument("--no-write", action="store_true", help="do not write a results file")
     run.add_argument(
