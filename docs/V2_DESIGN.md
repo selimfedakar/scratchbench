@@ -44,6 +44,44 @@ scaling, and the distinction is the whole design input for v2:
 > guess.** More conventions make a task longer and its score noisier. More
 > mechanism makes it harder.
 
+### 1b. One task already discriminates, and it is on the other tier
+
+Written after the first accelerated model runs, which changed the shape of this
+document.
+
+`fused_rmsnorm_kernel` — a fused RMSNorm forward pass in Triton, 24 hidden
+tests, the `kernels` category that was nearly cut for violating the laptop
+constraint — puts `claude-opus-5` at **1 out of 5 draws** on the same day the
+laptop tier put it at 40 out of 40.
+
+More useful than the rate is the failure. Four of the four captured failures are
+the same test, `test_a_single_column`, and the cause is one line:
+
+```
+mean_sq = sum_sq / n_cols.to(tl.float32)
+AttributeError("'int' object has no attribute 'to'")
+```
+
+Triton specializes an integer kernel argument whose value is `1` into a
+compile-time constant, so that line compiles at every row width except `N = 1`.
+The prompt licenses the case in as many words. Haiku 4.5, meanwhile, went 3 of 5
+on the same task, and its two failures were 24 of 24 tests and 23 of 24: not an
+edge missed, a kernel that does not run.
+
+**That contrast is the specification for v2, stated by an existing task rather
+than by me.** The task discriminates because:
+
+- the fluent answer and the correct answer differ, and the difference is not a
+  convention anyone could guess — it is a fact about how the compiler treats its
+  arguments;
+- the failure is a single test out of twenty-four, so the task separates *how*
+  two models fail rather than only whether they do;
+- nothing about it rewards writing more code.
+
+Everything in section 2 was reasoned from Haiku's laptop failures. This is the
+first time the reasoning has been checked against a task that actually separates
+frontier models.
+
 ## 2. What actually discriminates at the top
 
 Mechanism density alone is not sufficient — `online_softmax_attention` is
@@ -205,9 +243,18 @@ example, not before it.
   calibration against a third before they earn a place.
 - **New:** the two tasks above, then as many of the remaining six as clear the
   calibration bar.
-- **Accelerated tier:** unchanged in kind. `fused_rmsnorm_kernel` stays, a
-  second kernel task (Metal, so the README's claim stops being half true) is
-  the first addition. Still reported beside the headline and never inside it.
+- **Accelerated tier: promoted from a side quest to the part that works.** It is
+  the only tier currently discriminating at the top, so it gets more tasks
+  rather than fewer: a Metal kernel (so the README's claim stops being half
+  true), a backward kernel, and a reduction whose correctness depends on the
+  launch configuration. Still reported beside the headline and never inside it —
+  that separation is what makes the laptop claim true, and it does not bend
+  because the accelerated tier turned out to be the interesting one.
+
+  The honest tension: the tier that discriminates is the tier nobody can
+  reproduce without renting hardware. That is an argument for making the laptop
+  tier harder, not for folding the tiers together, and section 3 is that
+  argument.
 
 ## 6. Measurement changes that ship with v2
 
