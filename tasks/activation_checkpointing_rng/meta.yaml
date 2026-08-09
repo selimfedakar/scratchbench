@@ -1,0 +1,33 @@
+slug: activation_checkpointing_rng
+version: 1
+category: training
+difficulty: 4
+probes: >
+  Whether the model treats a random number generator as state rather than as a
+  source: recomputing a dropped-out block in the backward pass needs the draws
+  the forward made, and putting the generator back where the forward left it
+  afterwards is the half that produces perfect gradients this step and an
+  unreproducible training run on the next one.
+time_limit_s: 120
+tier: laptop
+requires_gpu: false
+deps: [torch]
+added: 2026-08-09
+# Written after the first two were refused, and refused for the same reason.
+# It was meant to move the difficulty off reasoning and onto a fact about a
+# tool; bracketing an RNG around a recomputation turns out to be a documented
+# fact about a tool. docs/LESSONS.md L30.
+frozen_set: warmup
+calibration:
+  - model: claude-opus-5
+    draws: 10
+    passed: 10
+    date: 2026-08-09
+  - model: claude-sonnet-5
+    draws: 10
+    passed: 10
+    date: 2026-08-09
+  - model: claude-haiku-4-5
+    draws: 10
+    passed: 1
+    date: 2026-08-09
