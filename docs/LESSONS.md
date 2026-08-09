@@ -13,6 +13,49 @@ Newest first.
 
 ---
 
+## L26 — I put the error bar on the column that did not need one
+
+**What I expected.** L19 watched a task flip between two runs of the same model
+and concluded that a published rate is one draw of a sampled process. So I built
+`--repeat`, `report --variance` and a `k/N` column, and wrote the leaderboard
+page around the sentence "no row here has an error bar yet". Everything I built
+was aimed at the pass rate.
+
+**What happened.** Five draws of Opus 5 over the laptop tier:
+
+```
+draw  rate    cost    wall      in     out
+   1  1.00  0.5560   215.4   15858   19070
+   4  1.00  0.4912   186.5   15858   16476
+```
+
+The rate has no spread at all — forty tasks asked, forty passed. The *cost* has
+a 14% spread, and the output token count a 16% one, from the same five files.
+
+**Why that is the wrong way round from what I designed for.** The input is
+byte-identical every draw, because the prompt is fixed and nothing is cached. So
+every bit of the model's variance lands in the output, and cost is a linear
+function of output. The score is not: it is a threshold over 308 tests, and a
+model that clears the threshold clears it regardless of how it phrased the
+answer. I had assumed one source of randomness meant one uncertain number, and
+it does not — the sampling shows up undiminished in the column I was about to
+print as a single figure and vanishes in the column I built machinery to
+qualify.
+
+**Where I nearly went wrong.** The page would have read "100% ± something" and
+"$0.54", and both halves would have been backwards. The second is the one that
+matters: a cost is the figure a reader is most likely to reuse, quoting it to
+the cent from one draw is a 7% claim dressed as a measurement, and nothing in
+the file would have said so.
+
+**What changed.** The rate reports as "100%, in all five" and the cost as a
+range, `$0.49 to $0.56`. Both say how many draws they came from.
+
+**What it cost.** Nothing beyond the $2.64 the sweep was going to cost anyway,
+and the entry is here because the near-miss is not a bug. Every mechanism worked
+exactly as designed. I had simply decided in advance which number was the
+uncertain one, and then built a tool that could only ever confirm it.
+
 ## L25 — The error bar I built to fix L19 had the L19 shape in it
 
 **What I expected.** `--repeat N` and `report --variance` are the answer to a
