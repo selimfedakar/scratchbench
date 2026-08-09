@@ -1,0 +1,32 @@
+slug: flash_attention_backward
+version: 1
+category: attention
+difficulty: 5
+probes: >
+  Whether the model can derive the attention backward pass rather than recall
+  it, and in particular whether it recognises that the row correction
+  rowsum(dO * O) is a property of the whole query row and cannot be accumulated
+  from the key block in hand, which is the one term a blocked implementation
+  gets wrong while still returning gradients of the right shape and scale.
+time_limit_s: 180
+tier: laptop
+requires_gpu: false
+deps: [torch]
+added: 2026-08-09
+# Refused from v2 by the admission rule in runner/tasks.py: the strongest model
+# tried passed every draw. Haiku's nineteenth draw is missing because its
+# adapter never answered, which is an absence of evidence and not a failure.
+frozen_set: warmup
+calibration:
+  - model: claude-opus-5
+    draws: 15
+    passed: 15
+    date: 2026-08-09
+  - model: claude-sonnet-5
+    draws: 10
+    passed: 8
+    date: 2026-08-09
+  - model: claude-haiku-4-5
+    draws: 19
+    passed: 3
+    date: 2026-08-09
