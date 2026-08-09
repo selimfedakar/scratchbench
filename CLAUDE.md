@@ -203,6 +203,46 @@ folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
 
+## State as of 2026-08-09, sessions 08 and 09 (verify before trusting)
+
+- **The repository is clean and CI is green.** `main` is ninety commits after a
+  full replay; the fifteen red crosses are gone because their commits are.
+- **Laptop tier, five draws each.** `claude-opus-5` 40/40, 100% in every draw,
+  $0.49 to $0.56 per draw. `claude-haiku-4-5` 18/40, 38% to 50%. Opus's input is
+  15858 tokens every draw and its output ranges 16476 to 19070: the model is
+  visibly sampling and the score does not move. **The laptop tier is saturated
+  at the top, measured rather than suspected.**
+- **Accelerated tier, first model runs ever.** `fused_rmsnorm_kernel` puts Opus
+  at **1 of 5** and Haiku at 3 of 5, on an RTX 4000 Ada. The rates are not
+  distinguishable at n=5; **the failure shapes are the finding**: every captured
+  Opus failure (4 for 4) is the same test, `test_a_single_column`, while Haiku's
+  failures are 24 of 24 and 23 of 24 tests. A working kernel missing an edge and
+  a kernel that does not run are the same word under binary scoring.
+  Cause: Triton specializes an integer argument whose value is 1 into a
+  compile-time constant, so `n_cols.to(tl.float32)` fails only at `N = 1`.
+  `prompt.md` licenses that case explicitly, which was checked before the result
+  was written down. See L27.
+- **`solution_error` earned itself in its first real use.** Haiku emitted
+  unparseable Python in three of five laptop draws. Under the pre-L22
+  classification each of those would have published 4/7 = 57% instead of
+  4/8 = 50%, and exited non-zero.
+- **The tier split verified in the wild:** `run --tier all` on the GPU box
+  printed `accelerated 100% (1/1)` and `laptop 100% (8/8) · headline` as two
+  lines, with `kernels` absent from the headline categories, and every
+  accelerated-only results file carries `"pass_rate": null` rather than
+  promoting the accelerated number into the headline slot.
+- Leaderboard: **22 results files**, every cost re-derives from its own tokens.
+  Everything on the page cost $3.30 total.
+- Harness suite **78 passed** on macOS, **77 passed 1 skipped** on Linux+CUDA
+  (the skip is the missing-hardware test, correctly inapplicable there).
+  `docs/LESSONS.md` runs to **L27**.
+- `docs/V2_DESIGN.md` updated: the accelerated tier is the only one still
+  discriminating, so it grows rather than shrinks, and §1b states the v2
+  specification using a task that actually separates frontier models instead of
+  using my intuition.
+- Still open: **no v2 task is written**, `kernels` has one task and the README
+  promises Metal too, and only two models have been asked anything.
+
 ## State as of 2026-08-03, session 07 (verify before trusting)
 
 Everything in the older block below still holds except where this one contradicts
