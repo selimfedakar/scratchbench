@@ -10,10 +10,19 @@ page, so nothing here has to be taken on trust.
 
 ## Task set v1 — laptop tier, 8 tasks, 308 hidden tests
 
-| Model | Pass rate | Solved | Cost | Wall clock | Attempts | Run |
-|---|---:|---:|---:|---:|---:|---|
-| `claude-opus-5` | **100%** | 8/8 | $0.54 | 213.1s | 1 | [2026-08-03](claude-opus-5-20260803.json) |
-| `claude-haiku-4-5` | **38%** | 3/8 | $0.07 | 116.6s | 1 | [2026-08-03](claude-haiku-4-5-20260803.json) |
+| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock | Attempts | Runs |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `claude-opus-5` | **100%**, in all five | 5 | 40/40 | $0.49 to $0.56 | 187 to 215s | 1 | [2026-08-09](claude-opus-5-20260809-draw1.json) ×5 |
+| `claude-haiku-4-5` | **38%** | 1 | 3/8 | $0.07 | 117s | 1 | [2026-08-03](claude-haiku-4-5-20260803.json) |
+
+The Opus row was a single draw until 2026-08-09 and is now five independent
+sweeps: [1](claude-opus-5-20260809-draw1.json) ·
+[2](claude-opus-5-20260809-draw2.json) ·
+[3](claude-opus-5-20260809-draw3.json) ·
+[4](claude-opus-5-20260809-draw4.json) ·
+[5](claude-opus-5-20260809-draw5.json). The earlier single draw
+([2026-08-03](claude-opus-5-20260803.json)) is still checked in; it agreed, at
+$0.54 and 213.1s. The Haiku row is still one draw and is labelled as one.
 
 308 rather than 332: the 24 tests in `fused_rmsnorm_kernel` belong to the
 accelerated tier, which is reported below and is not part of this rate. The
@@ -63,28 +72,55 @@ No model has been graded on it yet.
 
 ## What a row is, and what it is not
 
-**A row is one draw, not a converged number.** The same model on the same task
-passed one run and failed the next, four hours apart, with the same prompt and
-the same settings. Everything in this harness is pinned to be deterministic and
-none of that pinning reaches the model, which is sampled. So a single sweep is a
-sample: two models one task apart on eight tasks are not distinguishable, and
-nothing here should be read as though they were.
-
-Both rows above are single draws, and that is now a gap with a command behind
-it rather than a caveat:
+**A row is a sample, and now some of it has an error bar.** The same model on
+the same task passed one run and failed the next, four hours apart, with the
+same prompt and the same settings. Everything in this harness is pinned to be
+deterministic and none of that pinning reaches the model, which is sampled. So a
+single sweep is one draw:
 
 ```bash
 scratchbench run --model claude-opus-5 --tasks all --repeat 5
 scratchbench report --variance
 ```
 
-Each draw writes its own complete results file — they are independent runs, not
-retries, and no draw sees another's results. The per-task column that comes back
-is `k/N`, which separates a task a model reliably solves from one it solves half
-the time. Those two are the same row today.
+Each draw writes its own complete results file. They are independent runs, not
+retries: no draw sees another's results and `max_attempts` is still 1.
 
-**No row here has an error bar yet.** Until one does, treat any two rows within
-a task or two of each other as indistinguishable.
+```
+claude-opus-5  ·  task set v1  ·  5 draw(s)  ·  laptop tier  ·  8 task(s) asked
+
+task                       passed  spread
+-------------------------  ------  ------
+attention_causal_mask      5/5     always
+bpe_merge_order            5/5     always
+grad_accumulation          5/5     always
+kv_cache_equivalence       5/5     always
+online_softmax_attention   5/5     always
+quantization_error_bounds  5/5     always
+sharded_dataloader         5/5     always
+softmax_stability          5/5     always
+
+set pass rate: 100% in every draw
+```
+
+**Forty out of forty.** The sampling is real and it is visible in the same
+files: the prompt is byte-identical every time, so all five draws billed exactly
+15858 input tokens, while the output ran from 16476 to 19070 tokens — a 16%
+spread in what the model wrote. Five materially different answers to each task,
+and the same verdict every time.
+
+That is the strongest statement this page can make about v1, and it is not a
+compliment to the benchmark. A ceiling reached once is a good day; a ceiling
+reached five times out of five, with the model visibly sampling underneath, is a
+ceiling.
+
+**The cost column is the one carrying the error bar.** $0.49 to $0.56 across the
+five, entirely from output length, because input is fixed and output is not. A
+single-draw cost is a 7% estimate presented as a figure, so this table reports
+the range rather than one of the five.
+
+**The Haiku row is still one draw.** Until it is five, do not read the gap
+between it and anything else as anything but a gap between a sample and a range.
 
 **One attempt per task, and that is a measurement decision rather than a budget
 one.** A harness that re-prompts with the test results until something passes is
@@ -104,9 +140,11 @@ record.
 ## The first thing these two rows say about the benchmark
 
 A frontier model solves the laptop tier completely, on the first attempt, for
-half a dollar. That is a real result and it is also a limit: **v1 does not
-discriminate at the top.** It separates a small model from a large one clearly —
-38% against 100% — and it cannot yet tell two large models apart.
+half a dollar, and does it five times out of five. That is a real result and it
+is also a limit: **v1 does not discriminate at the top.** It separates a small
+model from a large one clearly — 38% against 100% — and it cannot tell two large
+models apart. The five draws move that sentence from a suspicion to a
+measurement: there is no draw in which v1 finds anything to say about Opus 5.
 
 The next task set has to be harder, and "harder" here has a specific meaning
 that the failures above point at. Haiku lost `kv_cache_equivalence` on nineteen
