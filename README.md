@@ -44,16 +44,27 @@ That single constraint is the whole design:
 
 Nine tasks, 332 hidden tests, and the entire reference sweep finishes in **under six seconds**.
 
-## The first two rows
+## The first rows
 
-| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock | Attempts |
-|---|---:|---:|---:|---:|---:|---:|
-| `claude-opus-5` | **100%**, in all five | 5 | 40/40 | $0.49 to $0.56 | 187 to 215s | 1 |
-| `claude-haiku-4-5` | **38%** | 1 | 3/8 | $0.07 | 117s | 1 |
+**Laptop tier**, five independent draws each, one attempt per task, both models at their own defaults:
 
-Laptop tier, task set v1, one attempt per task, both models at their own defaults. Every results file is checked in at [`leaderboard/`](leaderboard/), and the costs reproduce from the tokens in them to the last digit.
+| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock |
+|---|---:|---:|---:|---:|---:|
+| `claude-opus-5` | **100%**, every draw | 5 | 40/40 | $0.49 to $0.56 | 187 to 215s |
+| `claude-haiku-4-5` | **38% to 50%** | 5 | 18/40 | $0.059 to $0.077 | 62 to 90s |
 
-Read that first row as a limit as much as a result: **v1 does not discriminate at the top.** Five independent sweeps, forty tasks, forty passes. The sampling is real and it shows up in the same files — the prompt is byte-identical each time so the input is fixed at 15858 tokens, while the output ranges over 16476 to 19070, a 16% spread in what the model actually wrote. Five materially different answers, one verdict. A ceiling hit once is a good day; a ceiling hit five times out of five is a ceiling. What that implies about the next task set is [`docs/V2_DESIGN.md`](docs/V2_DESIGN.md).
+Read that first row as a limit as much as a result: **the laptop tier has stopped measuring at the top.** The sampling is real and it shows up in the same files — the prompt is byte-identical each time so the input is fixed at 15858 tokens, while the output ranges over 16476 to 19070, a 16% spread in what the model actually wrote. Five materially different answers, one verdict every time. A ceiling hit once is a good day; a ceiling hit five times out of five is a ceiling.
+
+**The accelerated tier has not stopped measuring.** One Triton task, same model, same day:
+
+| Model | Pass rate | Draws | Solved | Cost per draw |
+|---|---:|---:|---:|---:|
+| `claude-opus-5` | **20%** | 5 | 1/5 | $0.049 to $0.061 |
+| `claude-haiku-4-5` | **60%** | 5 | 3/5 | $0.008 |
+
+That is not Haiku beating Opus — five draws of one task cannot tell 20% from 60%. It is what sits underneath: **Opus fails one test out of twenty-four, the same one every time; Haiku, when it fails, fails all twenty-four.** A working kernel with an edge missed and a kernel that does not run are the same word under binary scoring and completely different results. The edge is that Triton specializes an integer argument whose value is `1` into a compile-time constant, so `n_cols.to(tl.float32)` compiles at every row width except a single-column one — which `prompt.md` licenses explicitly.
+
+Every results file is checked in at [`leaderboard/`](leaderboard/) and every cost re-derives from the tokens beside it. The whole table cost $3.30. What all of it implies about the next task set is [`docs/V2_DESIGN.md`](docs/V2_DESIGN.md).
 
 ## Run it
 
@@ -178,7 +189,7 @@ So: **v1 is frozen and dated.** Every result records the task-set version and th
 - **One attempt per task.** A model that passes on the eleventh try is measuring the scaffolding, not the model. The number is written into every results file so nobody has to take it on trust. Repeated *independent* runs are a different thing from retries, and welcome.
 - **No sampling, thinking or effort knobs are set.** Every model is asked at its own defaults, deliberately: a score at one effort setting and a score at another are not comparable, and nothing in a results file would say so.
 - **No server-side fallbacks.** If the model that answers is not the model that was asked, the run raises rather than publishing one model's work under another's name.
-- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Twenty-six entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
+- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Twenty-seven entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
 - **The `kernels` row promises Metal as well as Triton.** Only Triton exists today.
 
 ## What this repository does not contain
