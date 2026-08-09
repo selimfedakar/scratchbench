@@ -46,14 +46,14 @@ Nine tasks, 332 hidden tests, and the entire reference sweep finishes in **under
 
 ## The first two rows
 
-| Model | Pass rate | Solved | Cost | Wall clock | Attempts |
-|---|---:|---:|---:|---:|---:|
-| `claude-opus-5` | **100%** | 8/8 | $0.54 | 213.1s | 1 |
-| `claude-haiku-4-5` | **38%** | 3/8 | $0.07 | 116.6s | 1 |
+| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock | Attempts |
+|---|---:|---:|---:|---:|---:|---:|
+| `claude-opus-5` | **100%**, in all five | 5 | 40/40 | $0.49 to $0.56 | 187 to 215s | 1 |
+| `claude-haiku-4-5` | **38%** | 1 | 3/8 | $0.07 | 117s | 1 |
 
-Laptop tier, task set v1, 2026-08-03, one attempt per task, both models at their own defaults. The results files are checked in at [`leaderboard/`](leaderboard/), and the costs reproduce from the tokens in them to the last digit.
+Laptop tier, task set v1, one attempt per task, both models at their own defaults. Every results file is checked in at [`leaderboard/`](leaderboard/), and the costs reproduce from the tokens in them to the last digit.
 
-Read that first row as a limit as much as a result: **v1 does not discriminate at the top.** It separates a small model from a large one cleanly and it cannot yet tell two large models apart. What that implies about the next task set is written up in [`leaderboard/README.md`](leaderboard/README.md).
+Read that first row as a limit as much as a result: **v1 does not discriminate at the top.** Five independent sweeps, forty tasks, forty passes. The sampling is real and it shows up in the same files — the prompt is byte-identical each time so the input is fixed at 15858 tokens, while the output ranges over 16476 to 19070, a 16% spread in what the model actually wrote. Five materially different answers, one verdict. A ceiling hit once is a good day; a ceiling hit five times out of five is a ceiling. What that implies about the next task set is [`docs/V2_DESIGN.md`](docs/V2_DESIGN.md).
 
 ## Run it
 
@@ -178,7 +178,7 @@ So: **v1 is frozen and dated.** Every result records the task-set version and th
 - **One attempt per task.** A model that passes on the eleventh try is measuring the scaffolding, not the model. The number is written into every results file so nobody has to take it on trust. Repeated *independent* runs are a different thing from retries, and welcome.
 - **No sampling, thinking or effort knobs are set.** Every model is asked at its own defaults, deliberately: a score at one effort setting and a score at another are not comparable, and nothing in a results file would say so.
 - **No server-side fallbacks.** If the model that answers is not the model that was asked, the run raises rather than publishing one model's work under another's name.
-- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Twenty-five entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
+- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Twenty-six entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
 - **The `kernels` row promises Metal as well as Triton.** Only Triton exists today.
 
 ## What this repository does not contain
