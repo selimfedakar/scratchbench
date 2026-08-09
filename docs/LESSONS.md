@@ -13,6 +13,65 @@ Newest first.
 
 ---
 
+## L27 — I read a rate and nearly published the opposite of what happened
+
+**What I expected.** The accelerated tier had never been asked of a model. I
+expected it to behave like the laptop tier: Opus comfortably ahead, Haiku
+behind, and the interesting question being whether a kernel task is harder in
+some measurable way.
+
+**What happened.** Two single draws, in this order:
+
+```
+claude-opus-5      fused_rmsnorm_kernel ... FAIL  (1 failed, 23 passed)
+claude-haiku-4-5   fused_rmsnorm_kernel ... pass  (24 passed)
+```
+
+The sentence that assembles itself out of that is "Haiku beats Opus at CUDA
+kernels", and it is the kind of sentence that gets a benchmark repository
+attention. It is also two coin flips.
+
+Five draws each: Opus 1 out of 5, Haiku 3 out of 5. Which does not rescue the
+sentence, because five draws of one task cannot distinguish 20% from 60%
+either. What the draws actually contain is in a column the leaderboard was not
+printing:
+
+| | draws that failed | tests failed, out of 24 |
+|---|---:|---|
+| `claude-opus-5` | 4 of 5 | **1** every time |
+| `claude-haiku-4-5` | 2 of 5 | 24, and 23 |
+
+Opus writes a kernel that works and misses one edge. Haiku, when it fails,
+produces something that does not run at all. Binary scoring collapses both into
+`FAIL`, the rate collapses them further into a percentage, and the percentage
+puts them in the wrong order.
+
+**Where I nearly went wrong, twice.** The first was reporting the two single
+draws at all. The second was subtler and I caught it while writing the page: I
+had typed that Opus "consistently" fails the same test, on the evidence of four
+identical `1 failed, 23 passed` count lines. Identical counts are not an
+identical test. Four more draws, each keeping its workdir and re-running pytest
+against it by name, said `test_a_single_column` four times out of four. Now it
+is a measurement. It cost twenty cents to stop being a guess.
+
+**What the failure turned out to be**, and it is the reason the task earns its
+place: Triton specializes an integer kernel argument whose value is `1` into a
+compile-time constant, so `n_cols.to(tl.float32)` compiles at every row width
+except `N = 1`, where `n_cols` is a Python `int` with no `.to`. The prompt
+licenses the case explicitly — "M may be zero and N is at least one" — so the
+test is allowed to ask, which I checked before writing a word of the result.
+
+**What changed.** The leaderboard reports the failure shape beside the rate for
+this tier, and says in the same breath that the two rates are not
+distinguishable. The finding is not the ordering. The finding is that one task
+on the tier that was nearly cut puts a frontier model at 1 out of 5, while the
+entire laptop tier puts it at 40 out of 40.
+
+**What it cost.** $0.32 and an hour, and the entry is here because the wrong
+version of it was more interesting than the right one. That is the condition
+under which a benchmark publishes something false: not carelessness, but a
+result that is more fun to report than the truth underneath it.
+
 ## L26 — I put the error bar on the column that did not need one
 
 **What I expected.** L19 watched a task flip between two runs of the same model
