@@ -1,0 +1,168 @@
+{
+  "results_version": 2,
+  "harness_version": "0.1.0",
+  "model": "claude-opus-5",
+  "run_at": "2026-08-09T06:10:25+00:00",
+  "task_set": "v1",
+  "headline_tier": "laptop",
+  "pass_rate": 1.0,
+  "measured": 8,
+  "not_measured": 0,
+  "pass_rate_by_category": {
+    "attention": 1.0,
+    "data": 1.0,
+    "numerics": 1.0,
+    "tokenization": 1.0,
+    "training": 1.0
+  },
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": 1.0,
+      "solved": 8,
+      "measured": 8,
+      "total": 8,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "attention": 1.0,
+        "data": 1.0,
+        "numerics": 1.0,
+        "tokenization": 1.0,
+        "training": 1.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-opus-5-20260809T055704",
+    "index": 4,
+    "of": 5
+  },
+  "wall_clock_s": 186.54,
+  "usd_cost": 0.49119,
+  "tokens": {
+    "input": 15858,
+    "output": 16476,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "attention_causal_mask",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 2,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.36,
+      "counts": {
+        "passed": 26
+      },
+      "detail": ""
+    },
+    {
+      "slug": "bpe_merge_order",
+      "category": "tokenization",
+      "tier": "laptop",
+      "difficulty": 2,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.28,
+      "counts": {
+        "passed": 30
+      },
+      "detail": ""
+    },
+    {
+      "slug": "grad_accumulation",
+      "category": "training",
+      "tier": "laptop",
+      "difficulty": 3,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 2.34,
+      "counts": {
+        "passed": 27
+      },
+      "detail": ""
+    },
+    {
+      "slug": "kv_cache_equivalence",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 3,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.38,
+      "counts": {
+        "passed": 21
+      },
+      "detail": ""
+    },
+    {
+      "slug": "online_softmax_attention",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 5,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.43,
+      "counts": {
+        "passed": 57
+      },
+      "detail": ""
+    },
+    {
+      "slug": "quantization_error_bounds",
+      "category": "numerics",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.47,
+      "counts": {
+        "passed": 65
+      },
+      "detail": ""
+    },
+    {
+      "slug": "sharded_dataloader",
+      "category": "data",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.3,
+      "counts": {
+        "passed": 53
+      },
+      "detail": ""
+    },
+    {
+      "slug": "softmax_stability",
+      "category": "numerics",
+      "tier": "laptop",
+      "difficulty": 1,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 0.43,
+      "counts": {
+        "passed": 29
+      },
+      "detail": ""
+    }
+  ]
+}
