@@ -343,6 +343,15 @@ def group_draws(payloads: list[dict]) -> dict[tuple, list[dict]]:
     return groups
 
 
+def _measured_slugs(payload: dict, tier: str) -> set[str]:
+    """The tasks on `tier` this draw actually produced evidence about."""
+    return {
+        entry["slug"]
+        for entry in payload["tasks"]
+        if entry.get("tier", HEADLINE_TIER) == tier and entry["status"] not in NO_EVIDENCE
+    }
+
+
 def format_variance(payloads: list[dict], tier: str = HEADLINE_TIER) -> str:
     """Per task, how many of N draws passed. The error bar a single row lacks.
 
@@ -384,9 +393,19 @@ def format_variance(payloads: list[dict], tier: str = HEADLINE_TIER) -> str:
         # The set rate for the tier being spread, not the headline one: asking
         # for the accelerated tier's variance and being handed the laptop
         # tier's rate would be a table whose two halves describe different runs.
+        #
+        # And only over draws that measured every task the tier was asked for.
+        # A sweep that dies halfway still writes a file, and that file's rate is
+        # over the tasks it reached — folding it in next to a complete draw
+        # compares two different experiments, which is L25 one level down: there
+        # the two draws asked different sets, here they asked the same set and
+        # answered different amounts of it.
+        complete = [
+            payload for payload in draws if _measured_slugs(payload, tier) == set(slugs)
+        ]
         rates = [
             payload["pass_rate_by_tier"][tier]["pass_rate"]
-            for payload in draws
+            for payload in complete
             if payload.get("pass_rate_by_tier", {}).get(tier, {}).get("pass_rate")
             is not None
         ]
@@ -402,18 +421,23 @@ def format_variance(payloads: list[dict], tier: str = HEADLINE_TIER) -> str:
             ]
             for slug in slugs
         ]
+        partial = len(draws) - len(complete)
         header = (
             f"{model}  ·  task set {task_set}  ·  {len(draws)} draw(s)"
             f"  ·  {tier} tier  ·  {len(coverage)} task(s) asked"
         )
+        if partial:
+            header += f"  ·  {partial} draw(s) incomplete"
+        drawn = "every complete draw" if partial else "every draw"
         if not rates:
-            summary = "set pass rate: not measured"
+            summary = "set pass rate: not measured in any complete draw"
         elif min(rates) == max(rates):
-            summary = f"set pass rate: {rates[0]:.0%} in every draw"
+            summary = f"set pass rate: {rates[0]:.0%} in {drawn}"
         else:
             summary = (
                 f"set pass rate: {min(rates):.0%} to {max(rates):.0%}"
                 f"  ·  mean {sum(rates) / len(rates):.0%}"
+                f"  ·  over {len(rates)} complete draw(s)"
             )
         blocks.append(
             "\n".join([header, "", _table(["task", "passed", "spread"], rows), "", summary])
