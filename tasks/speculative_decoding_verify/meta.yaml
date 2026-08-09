@@ -1,0 +1,32 @@
+slug: speculative_decoding_verify
+version: 1
+category: attention
+difficulty: 4
+probes: >
+  Whether the model can derive the accept-and-correct step of speculative
+  decoding from the guarantee it exists to provide: the largest acceptance
+  probability that leaves the emitted token distributed exactly as the target,
+  and the renormalised positive residual the rejection branch has to draw from
+  for the two branches to add back up to it.
+time_limit_s: 180
+tier: laptop
+requires_gpu: false
+deps: [numpy]
+added: 2026-08-09
+# Refused from v2 by the admission rule in runner/tasks.py: the strongest model
+# tried passed every draw. It still separates the two models by a wide margin,
+# so it keeps its place in the warm-up set rather than being deleted.
+frozen_set: warmup
+calibration:
+  - model: claude-opus-5
+    draws: 15
+    passed: 15
+    date: 2026-08-09
+  - model: claude-sonnet-5
+    draws: 10
+    passed: 10
+    date: 2026-08-09
+  - model: claude-haiku-4-5
+    draws: 20
+    passed: 10
+    date: 2026-08-09
