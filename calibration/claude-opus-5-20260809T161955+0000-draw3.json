@@ -1,0 +1,76 @@
+{
+  "results_version": 2,
+  "harness_version": "0.1.0",
+  "model": "claude-opus-5",
+  "run_at": "2026-08-09T16:19:55+00:00",
+  "task_set": "unvalidated",
+  "headline_tier": "laptop",
+  "pass_rate": 1.0,
+  "measured": 2,
+  "not_measured": 0,
+  "pass_rate_by_category": {
+    "attention": 1.0
+  },
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": 1.0,
+      "solved": 2,
+      "measured": 2,
+      "total": 2,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "attention": 1.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-opus-5-20260809T161616",
+    "index": 3,
+    "of": 10
+  },
+  "wall_clock_s": 71.62,
+  "usd_cost": 0.160505,
+  "tokens": {
+    "input": 4231,
+    "output": 5574,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "speculative_decoding_verify",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 9.23,
+      "counts": {
+        "passed": 24
+      },
+      "detail": ""
+    },
+    {
+      "slug": "flash_attention_backward",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 5,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 1.65,
+      "counts": {
+        "passed": 49
+      },
+      "detail": ""
+    }
+  ]
+}
