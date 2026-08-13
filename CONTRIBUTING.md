@@ -92,12 +92,18 @@ from `results/`. It already carries the harness version, the task set version
 and the attempt count — a pass on the eleventh attempt is a different result
 from a pass on the first, and the leaderboard says so.
 
-Send more than one draw if you can:
+Send more than one draw if you can, and name the set you are asking about:
 
 ```bash
-scratchbench run --model <model> --tasks all --repeat 5
+scratchbench run --model <model> --tasks all --set v1 --repeat 5
 scratchbench report --variance
 ```
+
+`--set` matters now that the laptop tier holds more than one published set.
+Without it a sweep covers `v1` and `warmup` together and its `pass_rate` is an
+average across them, which is not a row anybody can compare to another row. The
+results file records `task_set` as the list it actually covered, so a blended run
+is visible rather than hidden, but a leaderboard row wants one set.
 
 The model is sampled and the harness is not, so a single sweep is one draw. The
 same model here has passed a task on one run and failed it on the next with the
@@ -110,6 +116,30 @@ If you send a cost, it has to reproduce:
 ```bash
 python tools/check_cost.py results/<your-file>.json
 ```
+
+## Calibrating a task
+
+A new task aimed at a numbered frozen set (`v2` and later) needs a `calibration:`
+block in its `meta.yaml` and the draws behind it in `calibration/`:
+
+```bash
+scratchbench run --model <model> --tasks <your_slug> --repeat 10 --keep /tmp/draws
+cp results/<model>-*.json calibration/
+python tools/check_calibration.py
+```
+
+Ten draws rather than five if you can afford them: two independent five-draw
+sweeps of the same model on the same task have come back 2/5 and 5/5 here.
+
+The loader refuses the task if the best model you tried passed every draw. That
+is not a bug report — it means the task belongs in `frozen_set: warmup`, where it
+keeps its block and stays out of the headline. Three tasks have gone there
+already and the reasoning is in `docs/LESSONS.md` L30.
+
+Keep the per-draw workdirs (`--keep`) and say which tests failed, by name. `1 of
+24` and `24 of 24` are the same verdict and completely different results, and
+counting is not the same as naming: four identical count lines have looked like
+the same test here and were not checked until they were.
 
 ## Development
 
