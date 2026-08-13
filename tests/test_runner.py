@@ -61,6 +61,31 @@ def test_naming_a_task_overrides_the_tier_filter():
     assert [task.slug for task in named] == ["softmax_stability"]
 
 
+def test_selecting_a_frozen_set_filters_the_set():
+    # The laptop tier stopped being one published set the moment `warmup`
+    # existed, so a sweep over every laptop task averages a frozen set with a
+    # warm-up set. That is L23 one axis over, and this is the flag that lets a
+    # leaderboard row ask about one of them.
+    everything = select_tasks(TASKS_ROOT, "all", "laptop")
+    v1_only = select_tasks(TASKS_ROOT, "all", "laptop", "v1")
+
+    assert {task.frozen_set for task in v1_only} == {"v1"}
+    assert len(v1_only) < len(everything)
+    assert {task.slug for task in v1_only} < {task.slug for task in everything}
+
+
+def test_naming_a_task_overrides_the_frozen_set_filter():
+    # Same rule the tier filter follows: being handed nothing when a slug was
+    # asked for is worse than running it.
+    picked = select_tasks(TASKS_ROOT, "speculative_decoding_verify", "laptop", "v1")
+    assert [task.slug for task in picked] == ["speculative_decoding_verify"]
+
+
+def test_an_unknown_frozen_set_is_refused():
+    with pytest.raises(TaskError, match="unknown frozen set"):
+        select_tasks(TASKS_ROOT, "all", "all", "v9")
+
+
 def test_an_unknown_tier_is_refused():
     with pytest.raises(TaskError, match="unknown tier"):
         select_tasks(TASKS_ROOT, "all", tier="quantum")
@@ -167,6 +192,152 @@ def test_a_missing_prompt_is_refused(tmp_path):
     (path / "prompt.md").unlink()
     with pytest.raises(TaskError, match="prompt.md"):
         load_task(path)
+
+
+# -- calibration, and the rule it exists to enforce ------------------------
+#
+# v1 was calibrated against how hard each task felt to write, and a frontier
+# model then solved every one of them first try (docs/LESSONS.md L21). From v2
+# onward a task carries what models actually scored on it, and a task nothing
+# ever fails cannot be in the set.
+
+CALIBRATED = """\
+calibration:
+  - model: claude-opus-5
+    draws: 5
+    passed: 2
+    date: 2026-08-10
+  - model: claude-haiku-4-5
+    draws: 5
+    passed: 0
+    date: 2026-08-10
+"""
+
+
+def test_a_task_without_calibration_has_an_empty_block(tmp_path):
+    assert load_task(make_task(tmp_path)).calibration == ()
+
+
+def test_calibration_is_read_off_the_metadata(tmp_path):
+    task = load_task(make_task(tmp_path, meta_overrides=CALIBRATED))
+    assert [entry.model for entry in task.calibration] == [
+        "claude-opus-5",
+        "claude-haiku-4-5",
+    ]
+    assert task.calibration[0].draws == 5
+    assert task.calibration[0].passed == 2
+    assert task.calibration[0].rate == 0.4
+    assert str(task.calibration[0]) == "claude-opus-5 2/5"
+
+
+@pytest.mark.parametrize(
+    "block,message",
+    [
+        ("calibration: nope\n", "must be a list"),
+        ("calibration:\n  - just a string\n", "expected a mapping"),
+        ("calibration:\n  - model: m\n    draws: 5\n    date: 2026-08-10\n", "missing keys"),
+        (
+            "calibration:\n  - model: m\n    draws: 0\n    passed: 0\n    date: 2026-08-10\n",
+            "draws must be at least 1",
+        ),
+        (
+            "calibration:\n  - model: m\n    draws: 5\n    passed: 6\n    date: 2026-08-10\n",
+            "passed must be 0..5",
+        ),
+        (
+            "calibration:\n  - model: m\n    draws: five\n    passed: 1\n    date: 2026-08-10\n",
+            "must be integers",
+        ),
+    ],
+)
+def test_an_unreadable_calibration_block_is_refused(tmp_path, block, message):
+    with pytest.raises(TaskError, match=message):
+        load_task(make_task(tmp_path, meta_overrides=block))
+
+
+def test_a_calibrated_set_needs_a_calibration_block(tmp_path):
+    path = make_task(tmp_path, meta_overrides="frozen_set: v2\n")
+    with pytest.raises(TaskError, match="needs a calibration block"):
+        load_task(path)
+
+
+def test_a_task_the_best_model_never_fails_cannot_enter_a_calibrated_set(tmp_path):
+    # The rule that v1 did not have: a set the top of the field clears
+    # completely has stopped measuring the top of the field.
+    override = (
+        "frozen_set: v2\n"
+        "calibration:\n"
+        "  - model: claude-opus-5\n"
+        "    draws: 5\n"
+        "    passed: 5\n"
+        "    date: 2026-08-10\n"
+        "  - model: claude-haiku-4-5\n"
+        "    draws: 5\n"
+        "    passed: 1\n"
+        "    date: 2026-08-10\n"
+    )
+    with pytest.raises(TaskError, match="passed all 5 draws"):
+        load_task(make_task(tmp_path, meta_overrides=override))
+
+
+def test_one_draw_is_not_a_calibration(tmp_path):
+    override = (
+        "frozen_set: v2\n"
+        "calibration:\n"
+        "  - model: claude-opus-5\n"
+        "    draws: 1\n"
+        "    passed: 0\n"
+        "    date: 2026-08-10\n"
+    )
+    with pytest.raises(TaskError, match="draws or more"):
+        load_task(make_task(tmp_path, meta_overrides=override))
+
+
+def test_a_calibrated_task_that_clears_the_bar_loads(tmp_path):
+    task = load_task(make_task(tmp_path, meta_overrides="frozen_set: v2\n" + CALIBRATED))
+    assert task.frozen_set == "v2"
+    assert len(task.calibration) == 2
+
+
+def test_v1_predates_the_rule_and_is_left_alone(tmp_path):
+    # Every v1 task would fail the admission check, and that is the point:
+    # they are published as what they were, not retrofitted.
+    assert load_task(make_task(tmp_path, meta_overrides="frozen_set: v1\n")).frozen_set == "v1"
+
+
+def test_a_task_waiting_for_calibration_is_not_held_to_the_rule(tmp_path):
+    path = make_task(tmp_path, meta_overrides="frozen_set: unvalidated\n")
+    assert load_task(path).calibration == ()
+
+
+def test_the_warm_up_set_is_where_a_task_everything_solves_goes(tmp_path):
+    # The other half of the admission rule. A task the top of the field never
+    # fails is not broken and not useless — it still separates a small model
+    # from a large one — so it keeps its calibration block and its place, just
+    # not in the headline.
+    override = (
+        "frozen_set: warmup\n"
+        "calibration:\n"
+        "  - model: claude-opus-5\n"
+        "    draws: 15\n"
+        "    passed: 15\n"
+        "    date: 2026-08-09\n"
+    )
+    task = load_task(make_task(tmp_path, meta_overrides=override))
+    assert task.frozen_set == "warmup"
+    assert task.calibration[0].rate == 1.0
+
+
+def test_a_warm_up_task_carries_the_measurement_that_put_it_there():
+    # The admission rule is the loader's job and `test_every_task_in_the_
+    # repository_loads` is what enforces it, so re-asserting it here would be a
+    # second copy of a rule that already lives in one place. This is the part
+    # the loader deliberately does not police: `warmup` is a claim that models
+    # were asked and cleared the task, and a claim with nothing behind it is
+    # what this repository is about not publishing.
+    for task in discover_tasks(TASKS_ROOT):
+        if task.frozen_set == "warmup":
+            assert task.calibration, f"{task.slug}: in the warm-up set with nothing to show"
 
 
 # -- grading ---------------------------------------------------------------
@@ -649,6 +820,38 @@ def test_a_draw_that_produced_no_evidence_is_not_counted_as_a_failed_draw():
     assert "1/1" in printed
 
 
+def test_a_sweep_that_died_halfway_is_not_a_draw_of_the_set_rate():
+    # A billing failure emptied four of five draws mid-sweep. The per-task
+    # column was right — it counts only what was measured — and the set rate
+    # underneath it read "100% in every draw" over five draws when one draw had
+    # measured both tasks, one had measured one of them at 100%, and three had
+    # measured nothing at all.
+    whole = _draw("claude-opus-5", {"a": True, "b": True})
+    half = _draw("claude-opus-5", {"a": True, "b": False})
+    half["tasks"][1]["status"] = "adapter_error"
+    half["pass_rate_by_tier"]["laptop"]["pass_rate"] = 1.0
+    empty = _draw("claude-opus-5", {"a": False, "b": False})
+    for entry in empty["tasks"]:
+        entry["status"] = "adapter_error"
+    empty["pass_rate_by_tier"]["laptop"]["pass_rate"] = None
+
+    printed = reporting.format_variance([whole, half, empty])
+    assert "3 draw(s)" in printed
+    assert "2 draw(s) incomplete" in printed
+    assert "in every complete draw" in printed
+    assert "a" in printed and "2/2" in printed
+    assert "1/1" in printed
+
+
+def test_a_group_with_no_complete_draw_reports_no_set_rate():
+    partial = _draw("claude-opus-5", {"a": True, "b": False})
+    partial["tasks"][1]["status"] = "adapter_error"
+    printed = reporting.format_variance([partial])
+    assert "not measured in any complete draw" in printed
+    # The evidence that does exist is still shown rather than thrown away.
+    assert "1/1" in printed
+
+
 def test_a_long_detail_is_clipped_to_keep_the_table_readable():
     clipped = reporting._clip("x" * 300)
     assert len(clipped) <= 58
@@ -774,6 +977,62 @@ def test_repeating_a_run_writes_one_independent_result_per_draw(tmp_path):
     assert sorted(payload["repeat"]["index"] for payload in payloads) == [1, 2]
     assert all(payload["repeat"]["of"] == 2 for payload in payloads)
     assert all(payload["pass_rate"] == 1.0 for payload in payloads)
+
+
+def test_each_draw_keeps_its_own_workdir(tmp_path):
+    # `--keep` names the directory after the task, so five draws of one task
+    # used to leave one directory holding the fifth. What a repeated sweep is
+    # for is the shape of each failure, and that is exactly what the overwrite
+    # threw away.
+    from runner.cli import main
+
+    kept = tmp_path / "workdirs"
+    assert (
+        main(
+            [
+                "run",
+                "--model",
+                "reference",
+                "--tasks",
+                "softmax_stability",
+                "--repeat",
+                "3",
+                "--keep",
+                str(kept),
+                "--results",
+                str(tmp_path / "results"),
+            ]
+        )
+        == 0
+    )
+    assert sorted(path.name for path in kept.iterdir()) == ["draw1", "draw2", "draw3"]
+    for draw in kept.iterdir():
+        assert (draw / "softmax_stability").is_dir()
+
+
+def test_a_single_run_keeps_its_workdir_where_it_was_asked_to(tmp_path):
+    # No draw index when there is only one draw: the path the user typed is the
+    # path they get.
+    from runner.cli import main
+
+    kept = tmp_path / "workdirs"
+    assert (
+        main(
+            [
+                "run",
+                "--model",
+                "reference",
+                "--tasks",
+                "softmax_stability",
+                "--keep",
+                str(kept),
+                "--results",
+                str(tmp_path / "results"),
+            ]
+        )
+        == 0
+    )
+    assert (kept / "softmax_stability").is_dir()
 
 
 def test_a_single_run_carries_no_repeat_block(tmp_path):
@@ -1008,6 +1267,44 @@ def test_every_published_cost_reproduces_from_its_own_tokens():
     for path in published:
         verdict, detail = check(path)
         assert verdict == "ok", f"{path.name}: {detail}"
+
+
+def test_every_calibration_block_reproduces_from_its_own_draws():
+    # A task is refused from a numbered frozen set on the strength of a number
+    # in `meta.yaml`. The draws that number came from are checked in under
+    # `calibration/`, so the claim is evidence rather than a claim.
+    sys.path.insert(0, str(REPO_ROOT))
+    from tools.check_calibration import measured
+
+    evidence = measured(REPO_ROOT / "calibration")
+    calibrated = [task for task in discover_tasks(TASKS_ROOT) if task.calibration]
+    assert calibrated, "no task carries a calibration block"
+    for task in calibrated:
+        for entry in task.calibration:
+            assert evidence.get((entry.model, task.slug)) == (entry.passed, entry.draws), (
+                f"{task.slug} / {entry.model}: meta.yaml claims {entry.passed}/{entry.draws}, "
+                f"the published draws say {evidence.get((entry.model, task.slug))}"
+            )
+
+
+def test_a_calibration_block_that_outruns_its_draws_is_caught(tmp_path):
+    sys.path.insert(0, str(REPO_ROOT))
+    from tools.check_calibration import measured
+
+    (tmp_path / "one.json").write_text(
+        json.dumps(
+            {
+                "model": "claude-opus-5",
+                "tasks": [
+                    {"slug": "a", "status": "passed", "passed": True},
+                    {"slug": "b", "status": "adapter_error", "passed": False},
+                ],
+            }
+        )
+    )
+    # The adapter error measured nothing, so it is in neither the numerator nor
+    # the denominator, exactly as it is in every rate.
+    assert measured(tmp_path) == {("claude-opus-5", "a"): (1, 1)}
 
 
 def test_a_cost_that_does_not_match_its_tokens_is_caught(tmp_path):
