@@ -42,7 +42,7 @@ That single constraint is the whole design:
 - **Grading is objective.** Tests pass or they do not. No judge model, no rubric, no argument.
 - **A full sweep costs tens of dollars, not thousands** — so it can be re-run the day a new model ships, not six months later.
 
-Nine tasks, 332 hidden tests, and the entire reference sweep finishes in **under six seconds**.
+Twelve tasks, 439 hidden tests, and the entire reference sweep finishes in **under twelve seconds**.
 
 ## The first rows
 
@@ -176,6 +176,46 @@ See [`TASK_FORMAT.md`](TASK_FORMAT.md) for the full contract, and [`CONTRIBUTING
 
 ⚡ = `accelerated` tier: needs CUDA, reported beside the laptop rate and **never folded into it**. On a machine without the hardware it comes back `needs_accelerator` — not a pass, not a failure, an absence of evidence, and it stays out of every percentage rather than being rounded down to zero.
 
+## The next set has to earn its place
+
+Every difficulty number in the table above was assigned by how hard the task felt to write, before a single model had been asked. Then a model was asked, and Claude Opus 5 solved all eight laptop tasks in every one of five draws. Those numbers were a measurement of the author.
+
+So from `v2` onward a task carries what models actually scored on it, and the rule is mechanical rather than editorial:
+
+```yaml
+calibration:
+  - model: claude-opus-5
+    draws: 15
+    passed: 15
+    date: 2026-08-09
+```
+
+**A task whose best result is a clean sweep cannot be in a numbered set.** The loader refuses it — not a warning, a `TaskError` — because a task that everything solves costs a sweep and returns no information. It goes to `frozen_set: warmup`, where it still separates a small model from a large one and stays out of the headline. `TASK_FORMAT.md` has the table.
+
+The first three tasks written against that rule were refused by it:
+
+| Task | Category | Tests | Opus 5 | Sonnet 5 | Haiku 4.5 | What it probes |
+|---|---|---:|---:|---:|---:|---|
+| `speculative_decoding_verify` | attention | 24 | 15/15 | 10/10 | 10/20 | accept-and-correct, graded on the output distribution |
+| `flash_attention_backward` | attention | 49 | 15/15 | **8/10** | 3/19 | a derived backward, and the row term that is not blockwise |
+| `activation_checkpointing_rng` | training | 34 | 10/10 | 10/10 | 1/10 | recomputation that puts the generator back where it found it |
+
+Every draw behind those numbers is checked in under [`calibration/`](calibration/), and `tools/check_calibration.py` re-derives all nine entries from them on every push. A figure that decides whether a task is allowed into a frozen set is not allowed to be the one figure nobody can reproduce.
+
+All three were built the way the design document asked for: the obvious answer forbidden, a property that is provable rather than plausible, mechanism that composes. `speculative_decoding_verify` never states the acceptance rule, only the guarantee it exists to provide, and grades the emitted tokens against the target distribution over two hundred thousand draws. `flash_attention_backward` hands the graded function one block of keys and never the rest, so the correction term that belongs to a whole query row cannot be accumulated from the block in hand. `activation_checkpointing_rng` compares generator state byte for byte, so an implementation that recomputes correctly and leaves the random stream rewound fails while its gradients are perfect. All three catch every wrong implementation written against them — twenty-eight mutants, twenty-eight caught.
+
+And Opus 5 passed all three, forty draws out of forty. The other two did not, and the *shape* of how they failed is the part worth reading. On `speculative_decoding_verify`, Haiku's wrong versions run, accept at plausible rates, and emit plausible tokens — what fails is the distribution those tokens are drawn from, which no comparison against a reference array on one input would ever have noticed. On `flash_attention_backward` the three models fail at three different depths:
+
+| | fails | what the failure is |
+|---|---:|---|
+| `claude-opus-5` | 0 of 15 | nothing |
+| `claude-sonnet-5` | 2 of 10 | the decode-time query offset, the same two tests both times |
+| `claude-haiku-4-5` | 16 of 19 | the row correction, or the `1/sqrt(d)` scale |
+
+Sonnet's `2 failed, 47 passed` is the signature of a mutant written for this task weeks before Sonnet was asked anything — *queries not put at the end of the key range*. A real model reproduced one of the invented wrong implementations, exactly, twice.
+
+Forty out of forty is the result. Not a disappointment: it is the first number this repository has produced that it could not have produced by asking the author how hard something felt, and the tasks it refuses are ones their author spent a day on. What it says is in [`docs/LESSONS.md`](docs/LESSONS.md) L30 and it is uncomfortable — the property that makes the one discriminating task hard is not on the list these three were built from, and naming it correctly makes the laptop tier's remaining difficulty look like unfamiliarity rather than depth.
+
 ## Honesty about contamination
 
 Any public benchmark leaks into the next training run. Pretending otherwise is worse than the leak.
@@ -189,7 +229,7 @@ So: **v1 is frozen and dated.** Every result records the task-set version and th
 - **One attempt per task.** A model that passes on the eleventh try is measuring the scaffolding, not the model. The number is written into every results file so nobody has to take it on trust. Repeated *independent* runs are a different thing from retries, and welcome.
 - **No sampling, thinking or effort knobs are set.** Every model is asked at its own defaults, deliberately: a score at one effort setting and a score at another are not comparable, and nothing in a results file would say so.
 - **No server-side fallbacks.** If the model that answers is not the model that was asked, the run raises rather than publishing one model's work under another's name.
-- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Twenty-seven entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
+- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Thirty entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
 - **The `kernels` row promises Metal as well as Triton.** Only Triton exists today.
 
 ## What this repository does not contain
