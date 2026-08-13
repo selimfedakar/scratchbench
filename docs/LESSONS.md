@@ -13,6 +13,155 @@ Newest first.
 
 ---
 
+## L30 — I copied the wrong property off the one task that discriminates
+
+**What I expected.** `fused_rmsnorm_kernel` puts Opus 5 at 1 out of 5 while the
+entire laptop tier puts it at 40 out of 40, so I read that task closely and wrote
+down what made it hard. `V2_DESIGN.md` §2 is the list: the obvious correct answer
+is forbidden, mechanisms compose so errors interact, a backward pass is derived
+rather than recalled, and the correctness property is provable rather than
+plausible. Three tasks were then built to satisfy it.
+
+**What happened.** Forty draws, and Opus 5 did not fail once.
+
+```
+speculative_decoding_verify   15/15
+flash_attention_backward      15/15
+activation_checkpointing_rng  10/10
+```
+
+**Why the list was right and beside the point.** Every property on it is real and
+every one is present in the kernel task. But the thing actually doing the work
+there is not on the list, because I described the task in the vocabulary I had
+rather than in the vocabulary of why it is hard: **`fused_rmsnorm_kernel` is not
+hard as an algorithm.** RMSNorm is four lines. It is hard because Triton
+specialises an integer kernel argument whose value is `1` into a compile-time
+constant, so `n_cols.to(tl.float32)` compiles at every row width except one. No
+amount of reasoning about root-mean-square normalisation reaches that. You find
+it by running the thing.
+
+All three of my tasks are reasoning, and hard reasoning: the accept-and-correct
+step has to be derived from the guarantee it provides, the row correction has to
+be recognised as not blockwise, the recomputation has to put the generator back
+where the forward left it. A model that can carry the derivation gets all of it,
+and Opus can carry the derivation.
+
+**The third task is the part that stings**, because it was written *after* I had
+noticed this, against the corrected reading. Its difficulty was supposed to be a
+fact about a tool rather than a step in an argument: PyTorch's global generator
+is state, and recomputation has to bracket it. Opus went 10 for 10. The
+correction was not enough, and the distinction that survives is narrower and less
+comfortable than "a fact about a tool" — it is a fact about a tool that is
+*obscure*. Restoring an RNG state around a checkpointed block is written down in
+every framework that implements checkpointing. Triton's specialisation of `1` is
+a footnote.
+
+Which means the laptop tier's remaining difficulty is not depth. It is
+unfamiliarity, and unfamiliarity is a moving target: it is contamination wearing
+a different coat, and designing against it is designing against next year's
+training set.
+
+**What changed.** `V2_DESIGN.md` §2 gains the property it was missing and says
+plainly that satisfying the other four is not sufficient, on the evidence of
+three tasks that satisfy all four. The three go to `frozen_set: warmup` by the
+rule written in the same session, which is at least the machinery working. And
+the honest read of the accelerated tier changes from "the tier that also
+discriminates" to "the only tier where the tooling is unfamiliar enough to."
+
+**What it cost.** $7.43 and a session, and the entry is here because none of the
+three tasks is bad. They separate Opus from Haiku by a mile, they catch every
+one of the twenty-eight wrong implementations written against them, and their
+failure shapes say more than their verdicts do. A criterion can be correct,
+satisfied in full, and measuring the wrong axis.
+
+## L29 — A sweep that died halfway went into the error bar as a draw
+
+**What I expected.** The absence-of-evidence rule has been fixed three times
+now: L11 kept an unmeasured task out of the rates, L20 put the classification in
+one place so a second list could not disagree with it, and L25 stopped two runs
+that asked different questions being averaged. I considered the class closed.
+Again.
+
+**What happened.** The calibration sweep's API key ran out of credit partway
+through the second of five draws. Every task in draws three, four and five came
+back `adapter_error`, and `report --variance` said:
+
+```
+claude-opus-5  ·  task set unvalidated  ·  5 draw(s)  ·  laptop tier  ·  2 task(s) asked
+
+task                         passed  spread
+speculative_decoding_verify  2/2     always
+flash_attention_backward     1/1     always
+
+set pass rate: 100% in every draw
+```
+
+Five draws, a hundred percent every time. What actually happened is that one
+draw measured both tasks, one measured one of them, and three measured nothing
+at all.
+
+**Why it survived.** Because every number in it is correct. `measured[slug]`
+already excludes outcomes with no evidence, which is exactly why the per-task
+column reads `2/2` and `1/1` instead of `2/5` and `1/5` — that part is the L11
+fix working. The set rate is read out of each draw's own file, and those are
+right too: draw two asked for two tasks, measured one, solved it, and recorded
+100%. Three correct components, and the sentence they assemble into is false.
+The phrase "in every draw" was written at a time when a draw could only be
+whole, and nothing re-examined it when partial draws became possible.
+
+L20 wrote this failure down in advance, in as many words: *"had it been present
+and the sweep merely rate-limited halfway, the file would have carried a
+plausible-looking rate computed over a denominator that included the tasks that
+never ran."* I fixed the denominator and left the sentence.
+
+**What changed.** The set rate is computed over draws that measured every task
+the tier was asked for; the header says how many draws were incomplete; the
+summary reads "in every complete draw" whenever any draw was not. Two tests, one
+of them the exact three-draw shape above.
+
+**What it cost.** Nothing, and it was free for the wrong reason. The outage was
+total and loud — three draws of solid red `ADAPTER` — which is why I read the
+block underneath the table at all. A rate limit that emptied one draw out of
+five prints the same false summary under a table that looks entirely normal.
+
+## L28 — The design document promised a test that cannot exist
+
+**What I expected.** `docs/V2_DESIGN.md` was written before any of the tasks it
+describes, which is the point of it: the tasks get written against a stated
+criterion instead of against my sense of hard (L21). For
+`flash_attention_backward` it stated how the hard constraint would be enforced —
+"the function takes a block size, and the tests require identical results across
+several block sizes, which a version that quietly builds the full N×N matrix and
+slices it cannot fake in a way that also gets `D` right."
+
+**What happened.** I sat down to write the tests and the sentence is simply
+false. Identical results across block sizes is a property of *every* correct
+implementation. A version that materialises the whole score matrix, computes the
+row correction correctly over the whole row, and slices it per block returns
+bit-identical answers at every block size — that is what being correct means.
+The test I had promised would catch materialisation catches nothing of the kind.
+It catches wrong answers, which is a different job it does well.
+
+**Where I nearly went wrong.** The false sentence sits in the same register as
+the true ones around it, and it is not careless: it is a plausible argument
+about a task that did not exist yet, and there was nothing to check it against.
+The next step after writing the tests is writing the prompt, and the prompt would
+have said non-materialisation was required, in a task where nothing required it.
+That is L8 — a rule stated and unenforced — except it was decided a week before
+the prompt existed, in a document that reads like a specification.
+
+**What changed.** The API rather than the tests. `key_block_gradients` is handed
+exactly one block of keys and never the rest of them, so inside the function that
+carries the hardest part of the task, materialisation is not something to be
+caught: it is not available. The top-level driver can still cheat and the prompt
+no longer claims otherwise. `V2_DESIGN.md` says what is enforced and by what
+mechanism.
+
+**What it cost.** Nothing, because the reference gets written first. L1 says
+that order surfaces the conventions I was about to leave unstated; this is the
+same effect one level up, where it surfaced a design claim I was about to leave
+unchecked. The order is worth more than the reason it was introduced for.
+
 ## L27 — I read a rate and nearly published the opposite of what happened
 
 **What I expected.** The accelerated tier had never been asked of a model. I
