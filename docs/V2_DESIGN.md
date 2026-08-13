@@ -4,9 +4,14 @@ v1 is frozen and stays published. This is the design for the set that replaces
 it as the headline, and the argument for why each part of it is shaped the way
 it is.
 
-Nothing here is built yet. It is written before the tasks so that the tasks are
-written against a stated criterion rather than against my sense of hard, which
-is the mistake v1 was calibrated with (`LESSONS.md` L21).
+It was written before the tasks, so that the tasks would be written against a
+stated criterion rather than against my sense of hard, which is the mistake v1
+was calibrated with (`LESSONS.md` L21). Three of them have since been written and
+all three were refused by the rule in section 4. The document is updated in place
+rather than rewritten, and the sections that turned out to be wrong say so:
+**2.0** is the property the criterion was missing, **3** is a structural claim no
+test could have kept (L28), and **5** is what v2 actually contains, which is
+nothing.
 
 ---
 
@@ -84,9 +89,27 @@ frontier models.
 
 ## 2. What actually discriminates at the top
 
-Mechanism density alone is not sufficient — `online_softmax_attention` is
-difficulty 5, mechanism dense, and Opus 5 passed it first try. Four properties
-separate frontier models where a single hard mechanism does not:
+> **Read 2.0 first. It was written after the four properties below had been
+> satisfied in full by three tasks, and a frontier model had passed all three
+> forty draws out of forty.** The four are real, they are worth having, and they
+> are not sufficient. Keeping them here with the result attached is more useful
+> than editing them out.
+
+**2.0 The difficulty is a fact about a tool, and an obscure one.** This is what
+`fused_rmsnorm_kernel` actually has and what section 1b failed to name. RMSNorm
+is four lines; the task is hard because Triton specialises an integer argument
+whose value is `1` into a compile-time constant, and no amount of reasoning about
+the normalisation reaches that. The three laptop tasks written against 2.1
+through 2.4 are all *reasoning*, and a model that can carry a derivation carries
+all of them. The obscurity clause is load-bearing and it is uncomfortable:
+`activation_checkpointing_rng` was written deliberately around a runtime fact,
+and lost, because bracketing an RNG around a recomputation is documented in every
+framework that implements checkpointing. See `LESSONS.md` L30, including what
+this implies about designing against a moving target.
+
+Mechanism density alone is not sufficient either — `online_softmax_attention` is
+difficulty 5, mechanism dense, and Opus 5 passed it first try. Four further
+properties separate frontier models where a single hard mechanism does not:
 
 **2.1 The obvious correct answer is forbidden.** The task states a constraint
 that rules out the textbook one-liner, and a hidden test enforces the
@@ -162,12 +185,29 @@ forward is given. Implement the backward: the recomputation, the `D = rowsum(dO
 ∘ O)` term, and the correct rescaling per block.
 
 Why it discriminates: the `D` term is the exact spot implementations get wrong,
-it does not fall out of pattern-matching the forward, and it is checkable to
-1e-6 in float64 against `torch.autograd`. Non-materialization is enforced
-structurally rather than with a timer: the function takes a block size, and the
-tests require identical results across several block sizes, which a version
-that quietly builds the full N×N matrix and slices it cannot fake in a way that
-also gets `D` right.
+it does not fall out of pattern-matching the forward, and it is checkable
+against `torch.autograd` in float64 — measured at 2.3e-15 across every block
+size, against a tolerance of 1e-10.
+
+Non-materialization is enforced by the shape of the interface, not by a test.
+The first version of this paragraph claimed the tests would catch it: identical
+results across several block sizes, which a materialising implementation
+supposedly could not fake. That was wrong, and it was wrong before a line of the
+task existed — block-size invariance is a property of every correct
+implementation, including one that builds the whole N×N matrix, computes `D`
+correctly over the whole row, and slices it (L28). So the task splits in two:
+`key_block_gradients` is handed one block of keys and never the rest, which
+makes materialisation unavailable rather than detectable, and the hidden tests
+grade that function directly against autograd's own score gradient. The
+top-level driver that walks the blocks can still cheat, and the prompt claims
+nothing about it that is not enforced.
+
+There is a second thing the split buys, and it turned out to be the sharper
+one. `D` is a property of a whole query row and the block function can only see
+one block of keys, so an implementation that accumulates the correction from the
+columns in hand is not merely inelegant, it is wrong — and wrong in the exact
+way real blocked implementations are: right shape, right magnitude, and correct
+whenever there happens to be a single block.
 
 ### The rest, in one line each
 
@@ -225,11 +265,21 @@ set, not in the headline.
 Note that `difficulty` then stops being an opinion and becomes a summary of
 that block. The number in v1 stays as it is, labelled for what it was.
 
-**This is not built yet, and deliberately.** Infrastructure written before its
-first user has tests that share the user's blind spot — that is L11, exactly,
-and it published wrong numbers twice. The `calibration` key, its validation and
-the admission rule get written alongside the first v2 task, against a real
-example, not before it.
+**Built, alongside the first three candidates rather than before them.**
+Infrastructure written before its first user has tests that share the user's
+blind spot — that is L11, exactly, and it published wrong numbers twice. So the
+`calibration` key, its validation and the admission rule were written once there
+were real tasks to hold them to, and the rule then refused the first two tasks
+it was pointed at, which is the only way to know it does anything.
+
+As implemented, "the strongest model tried" is read off the block rather than
+declared: the entry with the highest pass rate is the one the rule looks at, and
+if that entry passed every draw the loader refuses the task outright. A numbered
+set from `v2` onward also needs at least one entry of five draws or more,
+because one draw is not a measurement of a sampled process (L19). `v1` is exempt
+by name — it predates the rule and is published as what it was. Tasks that fail
+the bar go to `frozen_set: warmup`, which keeps the calibration block and stays
+out of the headline. `TASK_FORMAT.md` has the table.
 
 ## 5. What v2 is made of
 
@@ -238,11 +288,26 @@ example, not before it.
 - **Retired from the headline:** `softmax_stability` and `bpe_merge_order`.
   Both were lost on a single test, which is convention noise rather than
   capability, and both are solved by everything. They stay in v1, published.
-- **Under review:** `attention_causal_mask`, `sharded_dataloader`,
-  `quantization_error_bounds` — solved by both models tried, so they need
-  calibration against a third before they earn a place.
-- **New:** the two tasks above, then as many of the remaining six as clear the
-  calibration bar.
+- **Under review, and the review came back.** `attention_causal_mask`,
+  `sharded_dataloader` and `quantization_error_bounds` needed a third model
+  before they could earn a place. `claude-sonnet-5` solved all three, on the one
+  complete draw it got before the credit ran out. Three models, no failures:
+  under the admission rule in section 4 they belong in `warmup` alongside the
+  three written this session, and the only thing standing between them and that
+  label is four more draws.
+- **New: nothing yet, and that is a measurement rather than a delay.** Three of
+  the candidates above were written end to end on 2026-08-09 —
+  `speculative_decoding_verify`, `flash_attention_backward` and
+  `activation_checkpointing_rng` — and all three were refused by the admission
+  rule in section 4, because `claude-opus-5` passed 15, 15 and 10 draws
+  respectively without a single failure. They are `frozen_set: warmup`. They
+  separate Opus from Haiku by a wide margin, their failure shapes are the most
+  informative thing in the repository after the kernel task, and they do not
+  measure at the top. Section 2.0 is what that cost buys.
+
+  The five remaining candidates are all reasoning tasks of the same kind, so
+  writing them against the same criterion has a known answer. Anything new on
+  the laptop tier has to clear 2.0 first or it is a fourth warm-up task.
 - **Accelerated tier: promoted from a side quest to the part that works.** It is
   the only tier currently discriminating at the top, so it gets more tasks
   rather than fewer: a Metal kernel (so the README's claim stops being half
