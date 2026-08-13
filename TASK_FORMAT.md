@@ -29,6 +29,51 @@ added: 2026-07-26
 frozen_set: v1
 ```
 
+## Frozen sets, and how a task gets into one
+
+`frozen_set` says which published set a task belongs to, and from `v2` onward
+getting into one is something a task has to earn:
+
+| Value | Means |
+|---|---|
+| `unvalidated` | not finished. Its reference has never passed, usually because the hardware to run it on is somewhere else. Out of the leaderboard. |
+| `v1` | the first set. Published as what it is: difficulty numbers assigned by how hard each task felt to write, before any model had been asked. |
+| `warmup` | finished, verified, and solved by everything at the top. Useful for separating small models from large ones, and it measures nothing at the frontier, so it stays out of the headline. |
+| `v2`, `v3`, … | calibrated. Carries the block below, and is refused without it. |
+
+```yaml
+calibration:
+  - model: claude-opus-5
+    draws: 15
+    passed: 9
+    date: 2026-08-09
+  - model: claude-haiku-4-5
+    draws: 20
+    passed: 3
+    date: 2026-08-09
+```
+
+Each entry is one model asked the same question several independent times —
+draws, not retries. A numbered set from `v2` onward requires at least one entry,
+at least one entry with five draws or more, and **no entry in which a model
+passed every draw**. That last rule is the whole point: a task the best thing
+you tried never fails is a task that has stopped measuring, it costs a sweep and
+returns no information, and it belongs in `warmup`. The loader refuses the task
+outright rather than warning, because a benchmark that admits tasks on the
+author's estimate of difficulty is measuring the author (`docs/LESSONS.md` L21).
+
+`difficulty` stays in the file and stops being an opinion once a calibration
+block exists beside it: the number is then a summary of that block, not a
+prediction.
+
+**The draws go in the repository.** A task is refused from a frozen set on the
+strength of these numbers, so the results files they were computed from are
+checked in under `calibration/` and `tools/check_calibration.py` re-derives every
+block from them in CI. Draws that produced no evidence — an adapter that never
+answered — are in neither the numerator nor the denominator, on both sides of the
+comparison. A number that decides admission is not allowed to be a number nobody
+can reproduce.
+
 ## Tiers
 
 Two tiers, and the separation is what lets this repository hold both of its
