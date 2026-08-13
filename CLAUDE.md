@@ -43,6 +43,7 @@ pip install -e .                                   # editable install, gives the
 scratchbench validate                              # every task: reference passes, starter fails cleanly
 scratchbench validate --tasks kv_cache_equivalence # one task
 scratchbench run --model reference --tasks all     # full harness path, reference as the solver
+scratchbench run --model <m> --tasks all --set v1  # one published set: a leaderboard row wants one
 scratchbench report                                # table over results/*.json
 
 python -m pytest tasks/<slug>/hidden_tests -q      # do NOT: tests need the module beside them
@@ -62,9 +63,10 @@ Python is Anaconda 3.10 at `/Users/selimfedakar/anaconda3/bin/python3`.
 | `runner/cli.py` | `scratchbench run` / `report` / `validate` |
 | `runner/report.py` | results JSON schema, aggregation, the printed table |
 | `adapters/` | model adapters. `reference.py` and `anthropic_api.py` are real; the OpenAI one is a skeleton class in `model_api.py`, not its own file. |
-| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the accelerated tier's evidence) and `check_cost.py` (every published cost, re-derived from its tokens) |
+| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the accelerated tier's evidence), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws) |
 | `results/` | one JSON per run, gitignored except `.gitkeep` |
 | `leaderboard/` | published results, checked in by hand |
+| `calibration/` | the draws every `calibration:` block was computed from. Checked in, and re-derived in CI, because a task is refused from a frozen set on the strength of those numbers |
 | `notes/` | the author's Turkish study notes. Gitignored, never published, never copied into a tracked file. |
 
 ## How a run works
@@ -87,7 +89,14 @@ same in `starter/` and `reference/`.
 
 `reference/` → `hidden_tests/` → `prompt.md` → `meta.yaml`. Writing the
 reference first surfaces the conventions you were about to leave unstated;
-writing the prompt last means you are describing something that exists.
+writing the prompt last means you are describing something that exists. It also
+surfaces the design claims you were about to leave unchecked, which is one level
+up from what the order was introduced for (L28).
+
+Then the task is calibrated before it can enter a numbered frozen set from `v2`
+onward: several independent draws per model, recorded in `meta.yaml`, and a task
+that the best model tried never fails is refused by the loader. See
+`TASK_FORMAT.md`. `difficulty` is an opinion until that block exists beside it.
 
 ## Landmines
 
@@ -161,7 +170,7 @@ writing the prompt last means you are describing something that exists.
 Every step of the build gets a short entry in `docs/sessions/NN-title.md`, in
 English, first person: what was done, why, which technology carries it, and
 what was verified with pasted output. Written as the step finishes, not
-retrospectively. 00 through 03 exist; the next one is 04.
+retrospectively. 00 through 10 exist; the next one is 11.
 
 `docs/LESSONS.md` is the other half and it is **mandatory, every session**:
 what I got wrong, in my own voice, newest first. Not a changelog — the entries
@@ -202,6 +211,61 @@ computed over. `accelerated` may set `requires_gpu: true` and must declare
 folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
+
+## State as of 2026-08-09, session 10 (verify before trusting)
+
+- **Three v2 candidates written end to end, and all three refused by the
+  admission rule.** `speculative_decoding_verify` (attention, numpy, 24 tests),
+  `flash_attention_backward` (attention, torch, 49 tests) and
+  `activation_checkpointing_rng` (training, torch, 34 tests). Every one is L2 on
+  both halves and mutation-tested: 8, 10 and 10 mutants, all caught.
+  `tools/mutate_v2_tasks.py` re-runs the whole pass on a laptop.
+- **Three models asked.** `claude-opus-5` went 40 draws for 40 (15/15, 15/15,
+  10/10). `claude-sonnet-5` went 10/10, **8/10**, 10/10. `claude-haiku-4-5` went
+  10/20, 3/19, 1/10. All three tasks are `frozen_set: warmup`, which is the rule
+  working rather than the tasks failing.
+- **`flash_attention_backward` separates Sonnet from Opus** and is still refused,
+  because the rule looks at the best entry. Sonnet's two failures are the same
+  pair of tests both times and match a mutant's signature exactly (*queries not
+  put at the end of the key range*), so the failure is a convention missed at the
+  edge rather than a mechanism absent — which is what `warmup` is for. The
+  tension between the rule and its stated intent is written up in journal 10.
+- **`L30` is the finding and it is uncomfortable.** The four properties in
+  `V2_DESIGN.md` §2 were copied off `fused_rmsnorm_kernel` and they are not what
+  makes it hard: its difficulty is an obscure fact about a tool, not a step in an
+  argument. §2.0 now says so. The laptop tier's remaining difficulty looks like
+  unfamiliarity rather than depth.
+- **The calibration machinery exists.** Optional `calibration:` in `meta.yaml`,
+  validated in `runner/tasks.py`, and a numbered set from `v2` onward is refused
+  by the loader if the best entry passed every draw or if no entry has five
+  draws. `frozen_set: warmup` is where a refused task goes. `TASK_FORMAT.md` has
+  the table; `runner/cli.py list` prints the block.
+- **Two harness defects, both found by a billing failure mid-sweep.**
+  `report --variance` folded a half-finished draw into the set rate and printed
+  "100% in every draw" over one complete draw (L29, fixed); `--keep` named
+  workdirs after the task so nine of ten draws were overwritten and the failure
+  shapes were lost (fixed, and it is how the failure tables in journal 10 exist).
+- **Credit ran out twice**, both times mid-sweep, and both times the machinery
+  reported the hole rather than averaging over it. Sonnet's fourth v1 draw
+  measured seven tasks of eight for the same reason and is published as such.
+- **The calibration blocks are evidence, not claims.** The 65 draws they were
+  computed from are checked in under `calibration/`, `tools/check_calibration.py`
+  re-derives all nine entries from them, and CI runs it.
+- **`--set` filters a sweep to one frozen set**, on `run`, `validate` and `list`.
+  The laptop tier stopped being one published set the moment `warmup` existed, so
+  `--tasks all --tier laptop` now averages `v1` with `warmup` and a leaderboard
+  row wants one of them. Same shape as L23, one axis over.
+- Harness suite **100 passed**; `validate` reports **11 task(s) validated** here
+  (the CUDA task is not checkable on this machine); the control run is
+  **laptop 100% (11/11)** in 11.3s. Twelve task directories, 439 laptop hidden
+  tests. `docs/LESSONS.md` runs to **L30**, journals to **10**.
+- Spend: **$7.43**. `tools/check_cost.py` reports **27 file(s) checked**: five
+  Sonnet draws were published, and the v1 laptop tier now has a third row at
+  100%, every draw.
+- **Still open:** the accelerated tier has one task and is still the only tier
+  discriminating at the top. `torch.backends.mps.is_available()` is **True** on
+  this machine, so a `metal` task is verifiable here without renting anything —
+  that is the next piece of work and it is written up in the restart file.
 
 ## State as of 2026-08-09, sessions 08 and 09 (verify before trusting)
 
