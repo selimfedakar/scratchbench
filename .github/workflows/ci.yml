@@ -55,6 +55,14 @@ jobs:
       - name: Published costs reproduce from their own tokens
         run: python tools/check_cost.py
 
+      # The same idea one column over. `meta.yaml` says a model passed 15 of 15
+      # draws of a task, and a task is refused from a numbered set on the
+      # strength of that number, so the draws it was computed from are checked
+      # in under `calibration/` and the block is re-derived from them here.
+      # Without this the admission rule rests on a figure nobody can reproduce.
+      - name: Calibration blocks reproduce from their own draws
+        run: python tools/check_calibration.py
+
 # There is no accelerated job here, and its absence is a decision rather than an
 # omission. Running the accelerated tier in CI means attaching a self-hosted
 # runner with an NVIDIA device to this repository, and this repository is
