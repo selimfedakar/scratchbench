@@ -874,17 +874,21 @@ def test_validate_does_not_count_what_it_could_not_run(capsys):
     from runner.cli import main
     from runner.tasks import available_accelerators
 
-    accelerated = [
-        task for task in discover_tasks(TASKS_ROOT) if task.tier == "accelerated"
+    # Not every accelerated task: the tier holds more than one accelerator now,
+    # and a machine that has one of them validates those tasks and skips the
+    # rest. Only the ones this machine cannot run come off the count.
+    here = available_accelerators()
+    unrunnable = [
+        task
+        for task in discover_tasks(TASKS_ROOT)
+        if task.tier == "accelerated" and task.accelerator not in here
     ]
-    if not accelerated or all(
-        task.accelerator in available_accelerators() for task in accelerated
-    ):
+    if not unrunnable:
         pytest.skip("no accelerated task this machine is missing hardware for")
 
     assert main(["validate", "--tier", "all"]) == 0
     printed = capsys.readouterr().out
-    checked = len(discover_tasks(TASKS_ROOT)) - len(accelerated)
+    checked = len(discover_tasks(TASKS_ROOT)) - len(unrunnable)
     assert f"{checked} task(s) validated" in printed
     assert "not checked here" in printed
 
@@ -1264,19 +1268,28 @@ def test_every_published_cost_reproduces_from_its_own_tokens():
 
     published = sorted((REPO_ROOT / "leaderboard").glob("*.json"))
     assert published, "no published results to check"
+    checked = 0
     for path in published:
         verdict, detail = check(path)
-        assert verdict == "ok", f"{path.name}: {detail}"
+        # A draw whose adapter never answered has no cost and no tokens, and
+        # `n/a` is what the tool says about it. Demanding `ok` there would be
+        # the absence-of-evidence mistake one column over: the file is a record
+        # of a sweep that measured nothing, not a cost that failed to add up.
+        assert verdict in ("ok", "n/a"), f"{path.name}: {detail}"
+        checked += int(verdict == "ok")
+    assert checked, "every published file was n/a; nothing was actually re-derived"
 
 
 def test_every_calibration_block_reproduces_from_its_own_draws():
     # A task is refused from a numbered frozen set on the strength of a number
-    # in `meta.yaml`. The draws that number came from are checked in under
-    # `calibration/`, so the claim is evidence rather than a claim.
+    # in `meta.yaml`. The draws that number came from are checked in — under
+    # `calibration/` for a sweep run to calibrate, under `leaderboard/` for a
+    # task calibrated out of a row it was already part of — so the claim is
+    # evidence rather than a claim.
     sys.path.insert(0, str(REPO_ROOT))
     from tools.check_calibration import measured
 
-    evidence = measured(REPO_ROOT / "calibration")
+    evidence = measured(REPO_ROOT / "calibration", REPO_ROOT / "leaderboard")
     calibrated = [task for task in discover_tasks(TASKS_ROOT) if task.calibration]
     assert calibrated, "no task carries a calibration block"
     for task in calibrated:
@@ -1350,5 +1363,7 @@ def test_nothing_published_was_billed_at_a_cache_rate():
     # files agree, so this is where the claim is checked rather than asserted.
     for path in sorted((REPO_ROOT / "leaderboard").glob("*.json")):
         tokens = json.loads(path.read_text())["tokens"]
+        if tokens is None:  # the adapter never answered; there are no counts
+            continue
         assert tokens["cache_read"] == 0, path.name
         assert tokens["cache_write"] == 0, path.name
