@@ -5,10 +5,15 @@ themselves that is a claim, and this repository's argument is that a published
 number should not have to be taken on trust — `tools/check_cost.py` exists for
 exactly the same reason, one column over.
 
-So the draws are checked in under `calibration/`, and this walks them: for every
-task carrying a calibration block, count the draws in that directory that
-produced evidence about it and how many of them passed, and compare against what
-the metadata claims.
+So the draws are checked in, and this walks them: for every task carrying a
+calibration block, count the draws that produced evidence about it and how many
+of them passed, and compare against what the metadata claims.
+
+Two directories hold draws. `calibration/` is where a sweep run to calibrate a
+task lands. `leaderboard/` is where a published row's draws live, and a task
+calibrated out of a row it was already part of has its evidence there already —
+copying those files into `calibration/` would put the same evidence in the
+repository twice, with two chances to drift.
 
 Draws with no evidence are not counted, on either side. An adapter that never
 answered measured nothing about the model, so it belongs in neither the
@@ -38,10 +43,13 @@ from runner.sandbox import NO_EVIDENCE  # noqa: E402
 from runner.tasks import discover_tasks  # noqa: E402
 
 
-def measured(directory: Path) -> dict[tuple[str, str], tuple[int, int]]:
-    """`(model, slug) -> (passed, draws that produced evidence)`."""
+def measured(*directories: Path) -> dict[tuple[str, str], tuple[int, int]]:
+    """`(model, slug) -> (passed, draws that produced evidence)`, over every directory."""
     tally: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0])
-    for path in sorted(directory.glob("*.json")):
+    for path in sorted(
+        (path for directory in directories for path in directory.glob("*.json")),
+        key=lambda path: path.name,
+    ):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
@@ -63,12 +71,13 @@ def main() -> int:
     arguments = parser.parse_args()
 
     repo = Path(arguments.repo).resolve()
-    directory = repo / "calibration"
-    if not directory.is_dir():
-        print(f"{directory}: not a directory")
+    directories = [repo / "calibration", repo / "leaderboard"]
+    missing = [directory for directory in directories if not directory.is_dir()]
+    if missing:
+        print(f"{', '.join(str(directory) for directory in missing)}: not a directory")
         return 1
 
-    evidence = measured(directory)
+    evidence = measured(*directories)
     tasks = [task for task in discover_tasks(repo / "tasks") if task.calibration]
     if not tasks:
         print("no task carries a calibration block; nothing to check")
@@ -95,8 +104,9 @@ def main() -> int:
     if failures:
         print(f"{failures} of {checked} calibration entries do not match their own draws")
         return 1
+    draws = sum(len(list(directory.glob("*.json"))) for directory in directories)
     print(f"{checked} calibration entr{'y' if checked == 1 else 'ies'} re-derived from "
-          f"{len(list(directory.glob('*.json')))} draw(s) in calibration/")
+          f"{draws} draw(s) in calibration/ and leaderboard/")
     return 0
 
 
