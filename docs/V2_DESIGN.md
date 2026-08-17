@@ -288,13 +288,14 @@ out of the headline. `TASK_FORMAT.md` has the table.
 - **Retired from the headline:** `softmax_stability` and `bpe_merge_order`.
   Both were lost on a single test, which is convention noise rather than
   capability, and both are solved by everything. They stay in v1, published.
-- **Under review, and the review came back.** `attention_causal_mask`,
-  `sharded_dataloader` and `quantization_error_bounds` needed a third model
-  before they could earn a place. `claude-sonnet-5` solved all three, on the one
-  complete draw it got before the credit ran out. Three models, no failures:
-  under the admission rule in section 4 they belong in `warmup` alongside the
-  three written this session, and the only thing standing between them and that
-  label is four more draws.
+- **Under review, and the review came back. Moved on 2026-08-13.**
+  `attention_causal_mask`, `sharded_dataloader` and `quantization_error_bounds`
+  needed a third model before they could earn a place. `claude-sonnet-5` solved
+  all three. Three models, no failures, and the four extra draws this was waiting
+  on turned out to be already published: the 2026-08-09 sweeps carry five each
+  and the 2026-08-03 sweep a sixth for Opus and Haiku. All three are
+  `frozen_set: warmup` with the block re-derived from `leaderboard/`, so `v1` is
+  five laptop tasks now and was eight when its rows were measured.
 - **New: nothing yet, and that is a measurement rather than a delay.** Three of
   the candidates above were written end to end on 2026-08-09 —
   `speculative_decoding_verify`, `flash_attention_backward` and
@@ -316,10 +317,20 @@ out of the headline. `TASK_FORMAT.md` has the table.
   that separation is what makes the laptop claim true, and it does not bend
   because the accelerated tier turned out to be the interesting one.
 
-  The honest tension: the tier that discriminates is the tier nobody can
-  reproduce without renting hardware. That is an argument for making the laptop
-  tier harder, not for folding the tiers together, and section 3 is that
-  argument.
+  **The Metal kernel was written on 2026-08-13 and it is all three of those at
+  once.** `metal_cross_entropy_kernel` is a reduction whose correctness depends
+  on the launch configuration, because the caller chooses the threadgroup size
+  and the kernel never sees it until it runs. It is the first task in the
+  repository written against 2.0 rather than 2.1 through 2.4, and it is the
+  first one a frontier model has failed on the laptop this repository is
+  developed on.
+
+  The honest tension has moved. The tier that discriminates was the tier nobody
+  could reproduce without renting hardware; half of it is now reproducible on any
+  Apple silicon Mac, because `torch.mps.compile_shader` compiles a Metal source
+  string at runtime and needs no toolchain beyond torch. That is an argument for
+  writing the next accelerated task in Metal rather than CUDA, and it does not
+  weaken the case in section 3 for making the laptop tier harder.
 
 ## 6. Measurement changes that ship with v2
 
