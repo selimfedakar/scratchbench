@@ -1,0 +1,49 @@
+slug: metal_cross_entropy_kernel
+version: 1
+category: kernels
+difficulty: 4
+probes: >
+  Whether the model can write a real Metal threadgroup reduction: scratch
+  declared inside the kernel because the caller binds no threadgroup memory, a
+  fold that survives a group size which is neither a power of two nor a multiple
+  of the simdgroup width, idle lanes holding the identity, and the max shift
+  that keeps a vocabulary row finite.
+time_limit_s: 300
+tier: accelerated
+requires_gpu: true
+accelerator: metal
+deps: [torch]
+added: 2026-08-13
+# Written and verified on an M1 Pro on 2026-08-13: the reference passes 68
+# tests, the untouched starter fails all 68 with assertion errors, and every one
+# of thirteen mutants came back with the verdict it was written to get. Ten are
+# caught. Three survive on purpose: over-folding the maximum is idempotent and
+# therefore not a mutant at all, dropping the barrier between reading the maximum
+# and reusing the scratch is a real race this hardware does not expose, and a
+# correct kernel that does the whole row on one lane is graded on its answer like
+# any other. tools/mutate_metal_task.py re-runs the pass, and docs/LESSONS.md L31
+# through L33 is one entry per survivor.
+#
+# Calibrated on 2026-08-13, ten draws per model, and the first task in this
+# repository that a frontier model fails: claude-opus-5 lost two draws of ten,
+# both to the same compile error. The draws are published under leaderboard/ and
+# tools/check_calibration.py re-derives every line below from them. Haiku's tenth
+# draw returned an API error and measured nothing, so it is in neither the
+# numerator nor the denominator.
+#
+# v2 is being assembled rather than published: this is its first member, and the
+# leaderboard carries no v2 row until the set is complete.
+frozen_set: v2
+calibration:
+  - model: claude-opus-5
+    draws: 10
+    passed: 8
+    date: 2026-08-13
+  - model: claude-sonnet-5
+    draws: 10
+    passed: 4
+    date: 2026-08-13
+  - model: claude-haiku-4-5
+    draws: 9
+    passed: 1
+    date: 2026-08-13
