@@ -1,5 +1,9 @@
 # scratchbench
 
+[![ci](https://github.com/selimfedakar/scratchbench/actions/workflows/ci.yml/badge.svg)](https://github.com/selimfedakar/scratchbench/actions/workflows/ci.yml)
+[![python](https://img.shields.io/badge/python-3.10%20%7C%203.12-blue)](pyproject.toml)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **Can the model actually implement it?**
 
 Machine learning machinery — attention masks, KV-caches, gradient accumulation, quantization, a fused Triton kernel, a Metal threadgroup reduction — written from a written specification and graded by hidden pytest suites. On the laptop you already own. Under five minutes a task. No GPU, no Kaggle account, no cloud bill.
