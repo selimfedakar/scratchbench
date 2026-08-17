@@ -2,7 +2,7 @@
 
 **Can the model actually implement it?**
 
-Machine learning machinery — attention masks, KV-caches, gradient accumulation, quantization, a fused Triton kernel — written from a written specification and graded by hidden pytest suites. On the laptop you already own. Under five minutes a task. No GPU, no Kaggle account, no cloud bill.
+Machine learning machinery — attention masks, KV-caches, gradient accumulation, quantization, a fused Triton kernel, a Metal threadgroup reduction — written from a written specification and graded by hidden pytest suites. On the laptop you already own. Under five minutes a task. No GPU, no Kaggle account, no cloud bill.
 
 ```
 $ scratchbench run --model claude-haiku-4-5 --tasks softmax_stability
@@ -42,7 +42,7 @@ That single constraint is the whole design:
 - **Grading is objective.** Tests pass or they do not. No judge model, no rubric, no argument.
 - **A full sweep costs tens of dollars, not thousands** — so it can be re-run the day a new model ships, not six months later.
 
-Twelve tasks, 439 hidden tests, and the entire reference sweep finishes in **under twelve seconds**.
+Thirteen tasks, 507 hidden tests, and the entire reference sweep finishes in **sixteen seconds**.
 
 ## The first rows
 
@@ -98,18 +98,28 @@ Every task in this repository has to clear a bar with two halves:
 Half of that pair is worthless. A suite that passes against a correct solution proves nothing if it also passes against an empty one, and an import error and a wrong answer score identically while meaning completely different things.
 
 ```
-$ scratchbench validate
-task                       reference  untouched starter  time   verdict
--------------------------  ---------  -----------------  -----  -------
-attention_causal_mask      26 passed  26 failed          0.27s  ok
-bpe_merge_order            30 passed  30 failed          0.20s  ok
-grad_accumulation          27 passed  27 failed          1.48s  ok
-kv_cache_equivalence       21 passed  21 failed          0.26s  ok
-online_softmax_attention   57 passed  57 failed          0.28s  ok
-quantization_error_bounds  65 passed  65 failed          0.30s  ok
-sharded_dataloader         53 passed  53 failed          0.23s  ok
-softmax_stability          29 passed  29 failed          0.34s  ok
+$ scratchbench validate --tier all
+task                          reference  untouched starter  time   verdict
+----------------------------  ---------  -----------------  -----  -----------------------------------------
+activation_checkpointing_rng  34 passed  34 failed          1.31s  ok
+attention_causal_mask         26 passed  26 failed          0.28s  ok
+bpe_merge_order               30 passed  30 failed          0.20s  ok
+flash_attention_backward      49 passed  49 failed          1.00s  ok
+fused_rmsnorm_kernel          -          -                  -      UNCHECKED  no cuda device on this machine
+grad_accumulation             27 passed  27 failed          1.61s  ok
+kv_cache_equivalence          21 passed  21 failed          0.30s  ok
+metal_cross_entropy_kernel    68 passed  68 failed          1.41s  ok
+online_softmax_attention      57 passed  57 failed          0.31s  ok
+quantization_error_bounds     65 passed  65 failed          0.29s  ok
+sharded_dataloader            53 passed  53 failed          0.22s  ok
+softmax_stability             29 passed  29 failed          0.26s  ok
+speculative_decoding_verify   24 passed  24 failed          4.72s  ok
+
+12 task(s) validated: reference passes, starter fails cleanly.
+1 task(s) not checked here: fused_rmsnorm_kernel
 ```
+
+That last line is the tier separation working rather than a gap: this machine has Metal and no CUDA, so the Triton task is `UNCHECKED` instead of counted.
 
 There is a third check that does not fit in a table, and it is the one that has found the most: **the reference gets mutated on purpose.** Passing tests prove the reference is right; only mutants prove the tests would catch anything else. Every wrong version a real implementation would plausibly produce — the off-by-one, the wrong axis, the missing rescale — gets written and run, and the suite has to catch each one.
 
@@ -160,21 +170,24 @@ The graded environment is pinned — one thread, fixed hash seed, no inherited `
 
 See [`TASK_FORMAT.md`](TASK_FORMAT.md) for the full contract, and [`CONTRIBUTING.md`](CONTRIBUTING.md) if you want to add a task.
 
-## The task set — v1, frozen
+## The task set
 
-| Task | Category | Difficulty | Tests | What it actually probes |
-|---|---|:---:|---:|---|
-| `softmax_stability` | numerics | 1 | 29 | the max-subtraction, and what happens at ±1e4 |
-| `bpe_merge_order` | tokenization | 2 | 30 | merge ranks applied in order, round-trip exactness |
-| `attention_causal_mask` | attention | 2 | 26 | masking, and what a fully masked row returns |
-| `kv_cache_equivalence` | attention | 3 | 21 | token-by-token decoding equals one pass, with RoPE |
-| `grad_accumulation` | training | 3 | 27 | N micro-batches equal one big batch, in autograd |
-| `sharded_dataloader` | data | 4 | 53 | stride not slab, disjoint ranks, resumable mid-epoch |
-| `quantization_error_bounds` | numerics | 4 | 65 | per-channel scales, clipping, the error you promised |
-| `online_softmax_attention` | attention | 5 | 57 | tiled attention with a running max and rescale |
-| `fused_rmsnorm_kernel` ⚡ | kernels | 4 | 24 | a real Triton reduction, not a PyTorch one-liner |
+| Task | Set | Category | Difficulty | Tests | What it actually probes |
+|---|---|---|:---:|---:|---|
+| `softmax_stability` | v1 | numerics | 1 | 29 | the max-subtraction, and what happens at ±1e4 |
+| `bpe_merge_order` | v1 | tokenization | 2 | 30 | merge ranks applied in order, round-trip exactness |
+| `attention_causal_mask` | warmup | attention | 2 | 26 | masking, and what a fully masked row returns |
+| `kv_cache_equivalence` | v1 | attention | 3 | 21 | token-by-token decoding equals one pass, with RoPE |
+| `grad_accumulation` | v1 | training | 3 | 27 | N micro-batches equal one big batch, in autograd |
+| `sharded_dataloader` | warmup | data | 4 | 53 | stride not slab, disjoint ranks, resumable mid-epoch |
+| `quantization_error_bounds` | warmup | numerics | 4 | 65 | per-channel scales, clipping, the error you promised |
+| `online_softmax_attention` | v1 | attention | 5 | 57 | tiled attention with a running max and rescale |
+| `fused_rmsnorm_kernel` ⚡ | v1 | kernels | 4 | 24 | a real Triton reduction, not a PyTorch one-liner |
+| `metal_cross_entropy_kernel` ⚡ | v2 | kernels | 4 | 68 | a Metal threadgroup reduction at a group size it does not choose |
 
-⚡ = `accelerated` tier: needs CUDA, reported beside the laptop rate and **never folded into it**. On a machine without the hardware it comes back `needs_accelerator` — not a pass, not a failure, an absence of evidence, and it stays out of every percentage rather than being rounded down to zero.
+**`v1` is five laptop tasks and it was eight when the rows above were measured.** `attention_causal_mask`, `sharded_dataloader` and `quantization_error_bounds` moved to `warmup` on 2026-08-13, on the draws already published rather than on new ones: three models, six draws each for two of them, and only Haiku ever failed one. A task that everything solves is not wrong, it has stopped measuring, and the rule that says so is below.
+
+⚡ = `accelerated` tier: needs a GPU — CUDA for the Triton task, Metal for the other, which is to say any Apple silicon Mac. Reported beside the laptop rate and **never folded into it**. On a machine without the hardware it comes back `needs_accelerator` — not a pass, not a failure, an absence of evidence, and it stays out of every percentage rather than being rounded down to zero.
 
 ## The next set has to earn its place
 
@@ -214,6 +227,30 @@ And Opus 5 passed all three, forty draws out of forty. The other two did not, an
 
 Sonnet's `2 failed, 47 passed` is the signature of a mutant written for this task weeks before Sonnet was asked anything — *queries not put at the end of the key range*. A real model reproduced one of the invented wrong implementations, exactly, twice.
 
+### The first task the rule let in
+
+`metal_cross_entropy_kernel`, written on 2026-08-13 against the corrected criterion — the difficulty is a fact about a tool, and an obscure one — is the first task in this repository that a frontier model fails.
+
+| Model | Passed | Cost per draw |
+|---|---:|---|
+| `claude-opus-5` | **8 / 10** | $0.078 to $0.108 |
+| `claude-sonnet-5` | **4 / 10** | $0.033 to $0.091 |
+| `claude-haiku-4-5` | **1 / 9** | $0.006 to $0.117 |
+
+Three models, three rates, in the order the models are usually put in — which no other single task here manages. The kernel is a Metal source string compiled at runtime by `torch.mps.compile_shader`, so the tier that needed a rented GPU box now has half of itself reproducible on any Apple silicon Mac. The harness compiles the string and dispatches it, one threadgroup per row, at a threadgroup size the kernel never chooses: from 1 to 1024, narrower than the row or wider than it, not necessarily a power of two, not necessarily a multiple of the simdgroup width.
+
+**And the failure has a name.** Every one of Opus's two failures and five of Sonnet's six are the same compile error, on the same identifier:
+
+```
+E   SyntaxError: program_source:39:14: error: cannot combine with previous 'type-name' declaration specifier
+E           uint half = (n + 1u) / 2u;
+E                ^
+```
+
+`half` is a type in Metal Shading Language, so it cannot name a variable — and the reduction underneath it is correct in every one of those draws. I made the identical mistake in the first draft of the reference, an hour before either model was asked ([`docs/LESSONS.md`](docs/LESSONS.md) L34). Haiku fails a third way: six draws call Metal functions that do not exist, and one wrote a fold whose stride never reaches zero, hung the GPU, and was killed by the task's own time limit.
+
+That is exactly the difficulty L30 says survives, and exactly the difficulty L30 says is a moving target. This row is a measurement of one day. The full failure tables are in [`leaderboard/`](leaderboard/).
+
 Forty out of forty is the result. Not a disappointment: it is the first number this repository has produced that it could not have produced by asking the author how hard something felt, and the tasks it refuses are ones their author spent a day on. What it says is in [`docs/LESSONS.md`](docs/LESSONS.md) L30 and it is uncomfortable — the property that makes the one discriminating task hard is not on the list these three were built from, and naming it correctly makes the laptop tier's remaining difficulty look like unfamiliarity rather than depth.
 
 ## Honesty about contamination
@@ -230,7 +267,7 @@ So: **v1 is frozen and dated.** Every result records the task-set version and th
 - **No sampling, thinking or effort knobs are set.** Every model is asked at its own defaults, deliberately: a score at one effort setting and a score at another are not comparable, and nothing in a results file would say so.
 - **No server-side fallbacks.** If the model that answers is not the model that was asked, the run raises rather than publishing one model's work under another's name.
 - **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Thirty entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
-- **The `kernels` row promises Metal as well as Triton.** Only Triton exists today.
+- **A correctness benchmark cannot see a slow kernel.** `metal_cross_entropy_kernel` grades the answer, and a kernel that ignores its threadgroup entirely — one lane, a serial loop over the row, no reduction — passes all sixty-eight tests. The only assertion that would catch it is a wall-clock one, and those are banned here in every tier because timing on unknown hardware is not reproducible. The degenerate kernel is checked in as a mutant with `SURVIVES` as its expected verdict, so the hole is a re-runnable fact rather than a footnote, and all ten Opus draws wrote a real threadgroup reduction anyway. `docs/LESSONS.md` L33.
 
 ## What this repository does not contain
 
