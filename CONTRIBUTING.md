@@ -71,13 +71,18 @@ Two more that follow from it:
   — so the accelerated tier's evidence is collected by hand:
 
   ```bash
-  bash tools/verify_accelerated.sh   # on a machine with the accelerator
+  bash tools/verify_accelerated.sh   # CUDA: on a machine with the accelerator
+  python tools/mutate_metal_task.py  # Metal: on any Apple silicon Mac
   ```
 
   That prints the device, the torch and triton versions, the harness suite, both
   halves of `validate`, a control run, and the mutation pass. Paste all of it.
   A transcript that names the hardware is worth more than a green tick that does
   not.
+
+  The Metal half of that is cheaper than it sounds: `torch.mps.compile_shader`
+  turns a Metal source string into a callable kernel, so the hardware a `metal`
+  task needs is the laptop the rest of the benchmark already runs on.
 - Under five minutes, and the time limit in `meta.yaml` is enforced as a hard
   timeout. A GPU is not a licence to need an hour.
 - Deterministic: fixed seeds, no network, no wall-clock assertions.
