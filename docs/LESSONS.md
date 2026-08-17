@@ -13,6 +13,151 @@ Newest first.
 
 ---
 
+## L34 — The compile error I fixed in thirty seconds was the task
+
+**What I expected.** Writing the reference for the Metal task, my first draft
+named a loop variable `half`, because the fold halves a range. The Metal
+compiler rejected it: `half` is a type in Metal Shading Language, the 16-bit
+float. I renamed it to `stride`, moved on, and did not think about it again.
+
+**What happened.** Ten draws of `claude-opus-5` later, two failures, both
+`solution_error`, both this:
+
+```
+E   SyntaxError: program_source:39:14: error: cannot combine with previous
+    'type-name' declaration specifier
+E           uint half = (n + 1u) / 2u;
+E                ^
+```
+
+Draw 4 and draw 9, the same identifier, and the reduction logic in both is
+correct — the ceil-half fold with the live range carried properly, which is the
+part I thought the task was about. A frontier model made the exact mistake I had
+made, in the same place, for the same reason, and it is the only thing standing
+between it and 10 out of 10.
+
+**Where I nearly went wrong.** My own compile error read like noise: a typo, a
+minute lost, nothing to record. It was the clearest possible instance of the
+property L30 says is the only one that survives — *the difficulty is a fact
+about a tool, and an obscure one* — and I had it in my hands an hour before I
+had a task. If I had noticed, I would have gone looking for the other reserved
+words rather than stumbling into the one that mattered.
+
+**What changed.** Nothing in the code, which is the point: the task was already
+shaped to expose this. What changes is where I look for the next task's
+difficulty. The candidate list in `V2_DESIGN.md` §3 is still five reasoning
+tasks; the thing that actually separated Opus from itself here was a
+language-level fact that no amount of reasoning about cross-entropy reaches.
+
+**What it cost.** Thirty seconds at the time and the entry is free, but the
+cheapest evidence in this repository was sitting in my terminal unread, and it
+took a $0.94 sweep to tell me what my own compiler already had.
+
+## L33 — A kernel that uses one lane of the group passes every test I can write
+
+**What I expected.** The task hands the model a threadgroup per row and a group
+size chosen by the caller. I wrote the tests to enforce correctness under every
+geometry — group narrower than the row, wider than the row, not a power of two,
+wider than a simdgroup — and took it for granted that a solution which ignores
+the geometry would fail one of them.
+
+**What happened.** As a mutant, I wrote the degenerate kernel: `if (tid != 0)
+return;` and a serial loop over the row, no threadgroup memory, no barriers, no
+reduction at all. It passed all sixty-eight tests in 1.57 seconds, against the
+reference's 1.77.
+
+**Why it survives, and why it stays.** There is no black-box test for
+parallelism. The only assertion that separates the two kernels is a wall-clock
+one, and this repository forbids those everywhere — timing on unknown hardware
+is not reproducible, and reproducibility is the founding claim. Not on the
+laptop tier, not on the accelerated tier, not for this.
+
+So the honest statement of what the task measures is narrower than the one I
+would have written before running that mutant: **it measures whether the model
+can write a correct Metal kernel under a launch geometry it does not control.**
+It does not measure whether the kernel is fast, and the `prompt.md` does not
+claim it does — a promise no test can keep is exactly L8, and the prompt was
+written before the mutant was run, which is luck rather than discipline.
+
+**What changed.** The mutant is checked in with an expected verdict of
+`SURVIVES`, so the hole is a re-runnable fact rather than a paragraph. And ten
+Opus draws are checked in beside it: all ten used a real threadgroup reduction
+with a static scratch array, none took the shortcut. The hole is theoretical so
+far, and I would rather publish it than discover it in a pull request.
+
+**What it cost.** Nothing yet. It costs the day a model works out that the
+cheapest way to pass a kernel benchmark is to not write a kernel.
+
+## L32 — The race this hardware refuses to show me
+
+**What I expected.** The reference reads the row maximum out of `scratch[0]`,
+then every thread overwrites the scratch with its partial sum. Between those two
+there is a barrier, and dropping it is a textbook write-after-read race: thread 0
+can reach its write before another thread has read. I wrote it as a mutant
+expecting it to be caught.
+
+**What happened.** It passed. Sixty-eight tests, then thirty more configurations
+hunting for it by hand: 1024 rows against 2 columns so most lanes read
+immediately, group sizes of 96, 512 and 1024 so the read spans many simdgroups,
+4096-column rows so the write is far away in time, ten repeats each. The mutant
+and the reference agreed to the last bit in every one.
+
+**Why it survives.** Apple's scheduler runs the threadgroup's simdgroups closely
+enough in lockstep that the window never opens — on this machine, on this
+driver, today. The race is real: the Metal specification does not order those
+two accesses, and a future device that schedules simdgroups further apart is
+free to break it. What I cannot do is write a test that fails.
+
+**What changed.** The mutant is checked in with `SURVIVES` as its expected
+verdict, and the reason is in the script rather than in my head. If a future
+machine catches it, `tools/mutate_metal_task.py` fails — the expectation is
+checked in both directions on purpose — and that failure is news worth having.
+
+**What it cost.** An hour of hunting, and a sharper version of a thing I already
+half knew: on a GPU, "the tests pass" and "the program is correct" are further
+apart than they are anywhere else in this repository. Undefined behaviour that
+happens to work is the normal state of a kernel, and a benchmark that grades
+kernels by output alone is measuring something narrower than correctness.
+
+## L31 — I called a correct program a hole in my tests
+
+**What I expected.** The fold in the reference walks a live range: at each step
+the stride is half the *remaining* count rounded up, and a thread folds only if
+`tid + stride < active`. Bounding it by the threadgroup size instead —
+`tid + stride < tpg` — lets threads keep folding entries that were already
+folded, and lets a writer and a reader touch the same slot inside one barrier
+interval. I wrote it as a mutant for both reductions and expected both caught.
+
+**What happened.** The sum side was caught, nineteen tests. The max side passed
+everything, including a row of ±360 logits at four awkward group sizes, which is
+the test I added specifically to catch it.
+
+**Why.** Because on the max side it is not a mutant. `max` is idempotent and
+monotone: an extra merge can only move a value up toward the true maximum, never
+away from it, and a stale read returns a value that is still a maximum of some
+subset. Every element still reaches slot zero through the same chain the correct
+algorithm uses; the extra work is extra, not wrong. The mutated kernel computes
+the right answer, always, and a test that failed it would be a broken test.
+
+The sum side has none of that. Addition is not idempotent, an extra merge
+double-counts, and the tests see it immediately.
+
+**Where I nearly went wrong.** My first reading of the survivor was "the tests
+have a hole in the max reduction", and my hand was already on a new test. Two
+things stopped it. The mutation script prints the *expected* verdict beside the
+observed one, so a survivor is a question rather than a verdict. And the
+question — what would that test assert? — has no answer, because the mutant's
+output is correct.
+
+**What changed.** The mutant stays, with `SURVIVES` as its expectation and the
+algebra as its description. A mutation pass is a measurement, and a measurement
+that disagrees with you is sometimes telling you the reference has a property
+you had not noticed rather than that the tests are thin.
+
+**What it cost.** One test I did not need to write, and one I did: hunting the
+max-side survivor produced `test_a_wide_row_of_large_logits`, which catches four
+other things, so the wrong hypothesis paid for itself.
+
 ## L30 — I copied the wrong property off the one task that discriminates
 
 **What I expected.** `fused_rmsnorm_kernel` puts Opus 5 at 1 out of 5 while the
