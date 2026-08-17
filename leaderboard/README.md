@@ -48,6 +48,14 @@ concludes from it that `attention_causal_mask`, `sharded_dataloader` and
 written on 2026-08-09, which is where a task goes when it has stopped
 discriminating rather than when it is wrong.
 
+**On 2026-08-13 those three moved**, on the strength of the draws already on this
+page rather than new ones: six for Opus and Haiku, five for Sonnet, with the
+counts written into each `meta.yaml` and re-derived from these files by
+`tools/check_calibration.py`. So `v1` is five laptop tasks today and it was eight
+when every row above was measured. The rows are unchanged and so are the files
+behind them; what changed is which set the tasks belong to, and a sweep of
+`--set v1` after that date is not comparable with the ones here.
+
 ### Task by task, k out of 5 draws
 
 | Task | Difficulty | `claude-opus-5` | `claude-sonnet-5` | `claude-haiku-4-5` |
@@ -61,7 +69,106 @@ discriminating rather than when it is wrong.
 | `quantization_error_bounds` | 4 | 5/5 | 5/5 | 5/5 |
 | `online_softmax_attention` | 5 | 5/5 | 4/4 | 0/5 |
 
-## Accelerated tier — 1 task, 24 hidden tests
+## Accelerated tier, Metal — `metal_cross_entropy_kernel`, 68 hidden tests
+
+Verified on an **Apple M1 Pro**, macOS 15.5, torch 2.8.0, Metal 32023.883,
+Python 3.10. Reference 68 passed, untouched starter 68 failed, thirteen mutants
+each returning the verdict it was written to get. No rented hardware: the kernel
+is a Metal source string compiled at runtime by `torch.mps.compile_shader`, so
+anyone with an Apple silicon Mac can re-run every number in this section.
+
+Ten independent draws per model, one attempt each.
+
+| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock | Attempts |
+|---|---:|---:|---:|---:|---:|---:|
+| `claude-opus-5` | **80%** | 10 | 8/10 | $0.078 to $0.108 | 31 to 48s | 1 |
+| `claude-sonnet-5` | **40%** | 10 | 4/10 | $0.033 to $0.091 | 19 to 52s | 1 |
+| `claude-haiku-4-5` | **11%** | 9 | 1/9 | $0.006 to $0.117 | 8 to 310s | 1 |
+
+Files: opus [1](accelerated-metal-claude-opus-5-20260813-draw1.json)
+[2](accelerated-metal-claude-opus-5-20260813-draw2.json)
+[3](accelerated-metal-claude-opus-5-20260813-draw3.json)
+[4](accelerated-metal-claude-opus-5-20260813-draw4.json)
+[5](accelerated-metal-claude-opus-5-20260813-draw5.json)
+[6](accelerated-metal-claude-opus-5-20260813-draw6.json)
+[7](accelerated-metal-claude-opus-5-20260813-draw7.json)
+[8](accelerated-metal-claude-opus-5-20260813-draw8.json)
+[9](accelerated-metal-claude-opus-5-20260813-draw9.json)
+[10](accelerated-metal-claude-opus-5-20260813-draw10.json) · sonnet
+[1](accelerated-metal-claude-sonnet-5-20260813-draw1.json)
+[2](accelerated-metal-claude-sonnet-5-20260813-draw2.json)
+[3](accelerated-metal-claude-sonnet-5-20260813-draw3.json)
+[4](accelerated-metal-claude-sonnet-5-20260813-draw4.json)
+[5](accelerated-metal-claude-sonnet-5-20260813-draw5.json)
+[6](accelerated-metal-claude-sonnet-5-20260813-draw6.json)
+[7](accelerated-metal-claude-sonnet-5-20260813-draw7.json)
+[8](accelerated-metal-claude-sonnet-5-20260813-draw8.json)
+[9](accelerated-metal-claude-sonnet-5-20260813-draw9.json)
+[10](accelerated-metal-claude-sonnet-5-20260813-draw10.json) · haiku
+[1](accelerated-metal-claude-haiku-4-5-20260813-draw1.json)
+[2](accelerated-metal-claude-haiku-4-5-20260813-draw2.json)
+[3](accelerated-metal-claude-haiku-4-5-20260813-draw3.json)
+[4](accelerated-metal-claude-haiku-4-5-20260813-draw4.json)
+[5](accelerated-metal-claude-haiku-4-5-20260813-draw5.json)
+[6](accelerated-metal-claude-haiku-4-5-20260813-draw6.json)
+[7](accelerated-metal-claude-haiku-4-5-20260813-draw7.json)
+[8](accelerated-metal-claude-haiku-4-5-20260813-draw8.json)
+[9](accelerated-metal-claude-haiku-4-5-20260813-draw9.json)
+[10](accelerated-metal-claude-haiku-4-5-20260813-draw10.json).
+
+Haiku's tenth draw came back `adapter_error` — the API returned `overloaded` —
+so it measured nothing and is in neither the numerator nor the denominator. Its
+rate is nine draws and the table says so.
+
+**This is the first task in the repository a frontier model fails**, and the
+three rates are ordered the way the models are, which no other single task here
+does. It is also the reason the `kernels` category no longer promises Metal
+without delivering it.
+
+### The failures, by name rather than by count
+
+| | draws that failed | what happened |
+|---|---:|---|
+| `claude-opus-5` | 2 of 10 | both `uint half = ...`, which does not compile |
+| `claude-sonnet-5` | 6 of 10 | five the same `half`, one a power-of-two fold that drops entries |
+| `claude-haiku-4-5` | 8 of 9 | six call Metal functions that do not exist, one loops forever, one is wrong |
+
+`half` is a type in Metal Shading Language, the 16-bit float, so it cannot name
+a variable. Every model that reached for it was writing the same correct
+reduction — fold the live range in half, hence the name — and the compiler
+rejected the source before a single test ran:
+
+```
+E   SyntaxError: program_source:39:14: error: cannot combine with previous
+    'type-name' declaration specifier
+E           uint half = (n + 1u) / 2u;
+E                ^
+```
+
+Sonnet's one draw that compiled and still failed is `25 failed, 43 passed`, with
+`for (uint offset = tpg >> 1; offset > 0; offset >>= 1)` as its fold: the
+power-of-two halving that silently drops entries whenever the threadgroup size
+is not a power of two. That implementation is mutant three in
+`tools/mutate_metal_task.py`, written before any model was asked, and its
+failures land on the same tests the mutant's do.
+
+Haiku fails a third way, and it is the same way it failed the CUDA task: the
+kernels call things that are not there — `simdgroup_max`, `atomic_fetch_max` on
+a float, `atomic_compare_exchange_weak_explicit` with the wrong argument types.
+One draw wrote `for (uint step = (tpg + 1) / 2; step > 0; step = (step + 1) / 2)`,
+which never reaches zero, hung the GPU, and was killed by the task's own 300
+second limit — the only `timeout` this repository has ever recorded.
+
+**What that means for the number.** The signal separating these three models
+today is dominated by one reserved word, and a model that learns it moves
+several draws up without having become better at threadgroup reductions. The
+rest of the difficulty is real — the group size the kernel does not choose, the
+idle lanes, the fold over a range that is not a power of two, the shift that
+keeps a vocabulary row finite — but this row is a measurement of 2026-08-13 and
+it will not age well. That is what `docs/LESSONS.md` L30 predicted about
+designing against unfamiliarity, now with a number attached.
+
+## Accelerated tier, CUDA — 1 task, 24 hidden tests
 
 Verified on an **NVIDIA RTX 4000 Ada Generation**, torch 2.8.0+cu128,
 triton 3.4.0, Linux 6.8, Python 3.12. Reference 24 passed, untouched starter 24
