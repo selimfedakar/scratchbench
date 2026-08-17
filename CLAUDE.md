@@ -63,7 +63,7 @@ Python is Anaconda 3.10 at `/Users/selimfedakar/anaconda3/bin/python3`.
 | `runner/cli.py` | `scratchbench run` / `report` / `validate` |
 | `runner/report.py` | results JSON schema, aggregation, the printed table |
 | `adapters/` | model adapters. `reference.py` and `anthropic_api.py` are real; the OpenAI one is a skeleton class in `model_api.py`, not its own file. |
-| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the accelerated tier's evidence), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws) |
+| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the CUDA task's evidence, on a rented box), `mutate_metal_task.py` (the Metal task's, on any Apple silicon Mac), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws) |
 | `results/` | one JSON per run, gitignored except `.gitkeep` |
 | `leaderboard/` | published results, checked in by hand |
 | `calibration/` | the draws every `calibration:` block was computed from. Checked in, and re-derived in CI, because a task is refused from a frozen set on the strength of those numbers |
@@ -211,6 +211,65 @@ computed over. `accelerated` may set `requires_gpu: true` and must declare
 folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
+
+## State as of 2026-08-13, session 11 (verify before trusting)
+
+- **The Metal task exists and it is the first task a frontier model fails.**
+  `metal_cross_entropy_kernel` (kernels, `accelerated`, `accelerator: metal`,
+  torch only, 68 hidden tests, `frozen_set: v2`). Ten draws per model:
+  `claude-opus-5` **8/10**, `claude-sonnet-5` **4/10**, `claude-haiku-4-5`
+  **1/9** — three models, three rates, in order, which no other single task here
+  does. Haiku's tenth draw was an API `overloaded` error, measured nothing, and
+  is out of both sides of the rate.
+- **No rented hardware.** `torch.mps.compile_shader(source)` compiles a Metal
+  string at runtime and returns callable kernels, so the model writes `SOURCE`
+  and the harness compiles and dispatches it. The launch geometry is therefore
+  not the solution's to choose, which is the `flash_attention_backward` move one
+  tier over (L28). Four measured API facts carry the task: threadgroup memory
+  bound as a `[[threadgroup(0)]]` argument is **zero length and silently
+  reads zeros**, unwritten threadgroup memory is garbage rather than zeros,
+  `simd_sum` reduces a simdgroup and never a threadgroup, and the dispatch is
+  non-uniform so `threads_per_threadgroup` is not constant.
+- **The failures have a name: `half`.** Both of Opus's failures and five of
+  Sonnet's six are the same compile error — `half` is a type in Metal Shading
+  Language and cannot name a variable — with a correct reduction underneath. I
+  made the same mistake in the first draft of the reference (L34). Haiku fails
+  differently: six draws call Metal functions that do not exist, and one wrote a
+  fold whose stride never reaches zero, hung the GPU, and was killed by the
+  300 second limit, the first `timeout` this repository has recorded.
+- **Thirteen mutants, three of them expected to survive, and the expectation is
+  checked in both directions.** `tools/mutate_metal_task.py` fails if a survivor
+  is caught. The three: over-folding the maximum is idempotent so it is not a
+  mutant at all (L31); the missing write-after-read barrier is a real race this
+  hardware will not expose, hunted over thirty configurations (L32); and a
+  correct kernel that does the whole row on one lane passes all 68 tests,
+  because only a wall-clock assertion could see it and those are banned
+  everywhere here (L33).
+- **`v1` is five laptop tasks and was eight when its rows were measured.**
+  `attention_causal_mask`, `sharded_dataloader` and `quantization_error_bounds`
+  are `frozen_set: warmup` with blocks derived from draws that were already
+  published: six each for Opus and Haiku, five for Sonnet. The leaderboard page
+  says so where the rows are.
+- **`tools/check_calibration.py` now walks `calibration/` and `leaderboard/`.**
+  Copying seventeen published files into `calibration/` would have put the same
+  evidence in the repository twice; the tool reads both and the suite re-derives
+  from both. Two published-file tests were stricter than the tool and demanded
+  costs from a draw whose adapter never answered — both now accept `n/a`,
+  which is the same absence-of-evidence rule one column over.
+- Numbers from this session's runs: harness suite **103 passed**;
+  `validate --tier all` **12 task(s) validated, 1 not checked here**
+  (`fused_rmsnorm_kernel`, no CUDA on this machine); control run
+  **laptop 100% (11/11) · accelerated 100% (1/1)** in 16.2s;
+  `check_cost.py` **57 file(s) checked**; `check_calibration.py` **21
+  calibration entries re-derived from 122 draw(s)**. Thirteen tasks, **507**
+  hidden tests. `docs/LESSONS.md` runs to **L34**, journals to **11**.
+- Spend: **$1.71** for thirty draws.
+- **Still open:** `v2` has exactly one member and is being assembled rather than
+  published, so there is no v2 leaderboard row. The laptop tier is still
+  saturated at the top and every remaining `V2_DESIGN.md` §3 candidate is a
+  reasoning task, which §2.0 says is the wrong axis. The obvious next piece of
+  work is a second Metal task — a backward kernel — because the tier that
+  discriminates is now the tier this laptop can run.
 
 ## State as of 2026-08-09, session 10 (verify before trusting)
 
