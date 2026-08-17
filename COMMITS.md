@@ -15,49 +15,46 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 
 ## Pending
 
-### Session 10 — three v2 candidates, the calibration rule, and its evidence
+### Session 11 — the Metal task, its calibration, and three tasks moved to warmup
 
-A hundred and one commits in three groups of about thirty-four. Run them in order; a
-group is safe to stop after, and the group boundaries are where they are because
-of the two ordering constraints below, not for tidiness.
+Forty-nine commits in three groups. Run them in order; a group is safe to stop
+after, and the boundaries are the two ordering constraints below rather than
+tidiness.
 
 **Why this order.** `discover_tasks` only loads a directory that has a
-`meta.yaml`, so a task is invisible to `validate`, to the control run and to the
-whole suite until its metadata lands. Each task therefore goes in as reference,
-hidden tests, starter, prompt — four pushes CI cannot see — and then `meta.yaml`,
-at which point all four parts exist and it validates on arrival.
+`meta.yaml`, so the new task is invisible to `validate`, to the control run and
+to the whole suite until its metadata lands. It therefore goes in as reference,
+hidden tests, starter, prompt — four pushes CI cannot see — and its `meta.yaml`
+opens group 3, by which time both the machinery and the evidence its calibration
+block claims are already in the repository.
 
-Two ordering constraints are load-bearing and neither is obvious:
+Two constraints are load-bearing and neither is obvious:
 
-- `tests/test_runner.py` re-derives every calibration block from
-  `calibration/`, so **all 65 draw files must land before it** or the suite goes
-  red on a claim whose evidence has not arrived yet.
-- `.github/workflows/ci.yml` gains a `check_calibration.py` step, so it lands
-  **after** both the tool and the draws. Before that commit nothing runs the
-  checker, which is what makes block B silent.
+- `tools/check_calibration.py` has to land **before** the three `warmup`
+  metadata files. Their blocks are re-derived from `leaderboard/`, and the
+  version on `main` reads `calibration/` only, so the order the other way round
+  turns CI red on a claim whose evidence the checker cannot see.
+- `tests/test_runner.py` has to land **before** the Metal task's `meta.yaml`.
+  The old validate-count test subtracts every accelerated task from the number
+  of tasks it expects to be checked, which was right when the only accelerated
+  task needed hardware this machine does not have, and is wrong the moment one
+  of them runs here.
 
-The three runner files go in before `tests/test_runner.py` because the new tests
-import behaviour that does not exist until they land. The old tests pass against
-the new runner files, which is what makes those commits green rather than merely
-quiet.
+The thirty results files in group 2 are read by `tools/check_cost.py` on every
+push, and every one of them re-derives from its own tokens; nothing else reacts
+to them until the `meta.yaml` at the end.
 
 No force. `origin/main` and `main` are the same commit, so every push is a
 fast-forward.
 
-#### Grup 1 — the tasks, the tools, the runner, and the first draws (32 commits, ~32 minutes)
-
-The first twenty are the ones CI reacts to. Each task goes in as reference,
-hidden tests, starter, prompt — four pushes CI cannot see, because
-`discover_tasks` only loads a directory that has a `meta.yaml` — and then its
-`meta.yaml`, at which point all four parts exist and the task validates on
-arrival. The three runner files land after them and before any test that needs
-them. The last twelve are calibration draws, which nothing reads yet.
+#### Group 1 — the task, the machinery, and the three tasks that moved (10 commits, ~10 minutes)
 
 ```bash
 cd ~/scratchbench
 set -e
 
 n=0
+total=10
 while IFS='|' read -r file message; do
   if [ -z "$file" ]; then continue; fi
   n=$((n + 1))
@@ -65,54 +62,33 @@ while IFS='|' read -r file message; do
   git add "$file"
   git commit -q -m "$message"
   git push origin main
-  echo "  $n/32 pushed: $message"
+  echo "  $n/$total pushed: $message"
 done <<'QUEUE'
-tasks/speculative_decoding_verify/reference/speculative_decoding.py|speculative_decoding_verify: the accept-and-correct step, derived from its guarantee
-tasks/speculative_decoding_verify/hidden_tests/test_speculative_decoding.py|speculative_decoding_verify: hidden tests, graded on the output distribution
-tasks/speculative_decoding_verify/starter/speculative_decoding.py|speculative_decoding_verify: starter
-tasks/speculative_decoding_verify/prompt.md|speculative_decoding_verify: the prompt states the guarantee, not the formula
-tasks/speculative_decoding_verify/meta.yaml|speculative_decoding_verify: metadata and calibration
-tasks/flash_attention_backward/reference/flash_backward.py|flash_attention_backward: the backward pass, one block of keys at a time
-tasks/flash_attention_backward/hidden_tests/test_flash_backward.py|flash_attention_backward: hidden tests against autograd, and one against algebra
-tasks/flash_attention_backward/starter/flash_backward.py|flash_attention_backward: starter
-tasks/flash_attention_backward/prompt.md|flash_attention_backward: the prompt claims only what the interface enforces
-tasks/flash_attention_backward/meta.yaml|flash_attention_backward: metadata and calibration
-tasks/activation_checkpointing_rng/reference/checkpointed_mlp.py|activation_checkpointing_rng: recomputation that puts the generator back
-tasks/activation_checkpointing_rng/hidden_tests/test_checkpointed_mlp.py|activation_checkpointing_rng: hidden tests, including the generator state itself
-tasks/activation_checkpointing_rng/starter/checkpointed_mlp.py|activation_checkpointing_rng: starter
-tasks/activation_checkpointing_rng/prompt.md|activation_checkpointing_rng: the prompt asks for the bracket without describing it
-tasks/activation_checkpointing_rng/meta.yaml|activation_checkpointing_rng: metadata and calibration
-tools/mutate_v2_tasks.py|tools: the mutation pass for the laptop-tier v2 candidates
-tools/check_calibration.py|tools: every calibration block, re-derived from the draws behind it
-runner/tasks.py|runner: a calibration block, the admission rule, and a frozen-set filter
-runner/report.py|runner: a sweep that died halfway is not a draw of the set rate
-runner/cli.py|runner: per-draw workdirs, the calibration column, and --set
-calibration/claude-haiku-4-5-20260809T160658+0000-draw1.json|calibration: claude-haiku-4-5, draw 1 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T160730+0000-draw2.json|calibration: claude-haiku-4-5, draw 2 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T160807+0000-draw3.json|calibration: claude-haiku-4-5, draw 3 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T160836+0000-draw4.json|calibration: claude-haiku-4-5, draw 4 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T160901+0000-draw5.json|calibration: claude-haiku-4-5, draw 5 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T161145+0000-draw1.json|calibration: claude-haiku-4-5, draw 1 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T161238+0000-draw2.json|calibration: claude-haiku-4-5, draw 2 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T161309+0000-draw3.json|calibration: claude-haiku-4-5, draw 3 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T161340+0000-draw4.json|calibration: claude-haiku-4-5, draw 4 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T161405+0000-draw5.json|calibration: claude-haiku-4-5, draw 5 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T162905+0000-draw1.json|calibration: claude-haiku-4-5, draw 1 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T162941+0000-draw2.json|calibration: claude-haiku-4-5, draw 2 of a v2-candidate sweep
+tasks/metal_cross_entropy_kernel/reference/cross_entropy_kernel.py|metal_cross_entropy_kernel: the reduction, at a threadgroup size it does not choose
+tasks/metal_cross_entropy_kernel/hidden_tests/test_cross_entropy_kernel.py|metal_cross_entropy_kernel: hidden tests against a float64 loss on the CPU
+tasks/metal_cross_entropy_kernel/starter/cross_entropy_kernel.py|metal_cross_entropy_kernel: starter
+tasks/metal_cross_entropy_kernel/prompt.md|metal_cross_entropy_kernel: the prompt states the launch, not the kernel
+tools/mutate_metal_task.py|tools: the Metal task's mutation pass, with the verdict each mutant is expected to get
+tools/check_calibration.py|tools: a draw is evidence wherever it is published, so read leaderboard/ too
+tests/test_runner.py|tests: calibration from both directories, one accelerator missing is not all of them, and a draw with no call has no cost
+tasks/attention_causal_mask/meta.yaml|attention_causal_mask: warmup, on the draws already published
+tasks/quantization_error_bounds/meta.yaml|quantization_error_bounds: warmup, on the draws already published
+tasks/sharded_dataloader/meta.yaml|sharded_dataloader: warmup, on the draws already published
 QUEUE
 ```
 
-#### Grup 2 — calibration draws (32 commits, ~32 minutes, unattended)
+#### Group 2 — the thirty calibration draws (30 commits, ~30 minutes, unattended)
 
-Thirty-two results files and nothing else. No workflow can fail on any of these
-trees, so this group is safe to start and walk away from. `sleep 20` instead of
-`sleep 60` is fine here and cuts it to eleven minutes.
+Results files and nothing else. No workflow can fail on any of these trees, so
+this group is safe to start and walk away from. `sleep 20` instead of `sleep 60`
+is fine here and cuts it to ten minutes.
 
 ```bash
 cd ~/scratchbench
 set -e
 
 n=0
+total=30
 while IFS='|' read -r file message; do
   if [ -z "$file" ]; then continue; fi
   n=$((n + 1))
@@ -120,56 +96,53 @@ while IFS='|' read -r file message; do
   git add "$file"
   git commit -q -m "$message"
   git push origin main
-  echo "  $n/32 pushed: $message"
+  echo "  $n/$total pushed: $message"
 done <<'QUEUE'
-calibration/claude-haiku-4-5-20260809T163008+0000-draw3.json|calibration: claude-haiku-4-5, draw 3 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163043+0000-draw4.json|calibration: claude-haiku-4-5, draw 4 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163114+0000-draw5.json|calibration: claude-haiku-4-5, draw 5 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163152+0000-draw6.json|calibration: claude-haiku-4-5, draw 6 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163226+0000-draw7.json|calibration: claude-haiku-4-5, draw 7 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163251+0000-draw8.json|calibration: claude-haiku-4-5, draw 8 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163318+0000-draw9.json|calibration: claude-haiku-4-5, draw 9 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163342+0000-draw10.json|calibration: claude-haiku-4-5, draw 10 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163903+0000-draw1.json|calibration: claude-haiku-4-5, draw 1 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163915+0000-draw2.json|calibration: claude-haiku-4-5, draw 2 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163926+0000-draw3.json|calibration: claude-haiku-4-5, draw 3 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163936+0000-draw4.json|calibration: claude-haiku-4-5, draw 4 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163947+0000-draw5.json|calibration: claude-haiku-4-5, draw 5 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T163957+0000-draw6.json|calibration: claude-haiku-4-5, draw 6 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T164006+0000-draw7.json|calibration: claude-haiku-4-5, draw 7 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T164025+0000-draw8.json|calibration: claude-haiku-4-5, draw 8 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T164035+0000-draw9.json|calibration: claude-haiku-4-5, draw 9 of a v2-candidate sweep
-calibration/claude-haiku-4-5-20260809T164047+0000-draw10.json|calibration: claude-haiku-4-5, draw 10 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T160108+0000-draw1.json|calibration: claude-opus-5, draw 1 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T160217+0000-draw2.json|calibration: claude-opus-5, draw 2 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T160340+0000-draw3.json|calibration: claude-opus-5, draw 3 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T160447+0000-draw4.json|calibration: claude-opus-5, draw 4 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T160607+0000-draw5.json|calibration: claude-opus-5, draw 5 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T161732+0000-draw1.json|calibration: claude-opus-5, draw 1 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T161843+0000-draw2.json|calibration: claude-opus-5, draw 2 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T161955+0000-draw3.json|calibration: claude-opus-5, draw 3 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T162110+0000-draw4.json|calibration: claude-opus-5, draw 4 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T162223+0000-draw5.json|calibration: claude-opus-5, draw 5 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T162343+0000-draw6.json|calibration: claude-opus-5, draw 6 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T162443+0000-draw7.json|calibration: claude-opus-5, draw 7 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T162544+0000-draw8.json|calibration: claude-opus-5, draw 8 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T162653+0000-draw9.json|calibration: claude-opus-5, draw 9 of a v2-candidate sweep
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw1.json|leaderboard: claude-opus-5 on the Metal kernel, draw 1 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw2.json|leaderboard: claude-opus-5 on the Metal kernel, draw 2 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw3.json|leaderboard: claude-opus-5 on the Metal kernel, draw 3 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw4.json|leaderboard: claude-opus-5 on the Metal kernel, draw 4 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw5.json|leaderboard: claude-opus-5 on the Metal kernel, draw 5 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw6.json|leaderboard: claude-opus-5 on the Metal kernel, draw 6 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw7.json|leaderboard: claude-opus-5 on the Metal kernel, draw 7 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw8.json|leaderboard: claude-opus-5 on the Metal kernel, draw 8 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw9.json|leaderboard: claude-opus-5 on the Metal kernel, draw 9 of 10
+leaderboard/accelerated-metal-claude-opus-5-20260813-draw10.json|leaderboard: claude-opus-5 on the Metal kernel, draw 10 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw1.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 1 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw2.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 2 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw3.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 3 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw4.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 4 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw5.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 5 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw6.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 6 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw7.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 7 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw8.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 8 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw9.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 9 of 10
+leaderboard/accelerated-metal-claude-sonnet-5-20260813-draw10.json|leaderboard: claude-sonnet-5 on the Metal kernel, draw 10 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw1.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 1 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw2.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 2 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw3.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 3 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw4.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 4 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw5.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 5 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw6.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 6 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw7.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 7 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw8.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 8 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw9.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 9 of 10
+leaderboard/accelerated-metal-claude-haiku-4-5-20260813-draw10.json|leaderboard: claude-haiku-4-5 on the Metal kernel, draw 10 of 10
 QUEUE
 ```
--- burdan 
-#### Grup 3 — the last draws, then the tests, CI and the documents (37 commits, ~37 minutes)
 
-The remaining twenty-one draws first, and only then `tests/test_runner.py`,
-because it re-derives every calibration block from `calibration/` and would go
-red against evidence that has not finished arriving. `.github/workflows/ci.yml`
-comes after both the tool and the draws: before that commit nothing runs
-`check_calibration.py`, which is what makes groups 1 and 2 silent.
+#### Group 3 — the metadata that turns it on, and the documents (9 commits, ~9 minutes)
+
+The first commit here is the one CI reacts to: the task becomes visible, its
+calibration block is checked against the draws from group 2, and `validate`
+reports it as `UNCHECKED` on the Linux runner, which has no Metal device.
 
 ```bash
 cd ~/scratchbench
 set -e
 
 n=0
+total=9
 while IFS='|' read -r file message; do
   if [ -z "$file" ]; then continue; fi
   n=$((n + 1))
@@ -177,63 +150,48 @@ while IFS='|' read -r file message; do
   git add "$file"
   git commit -q -m "$message"
   git push origin main
-  echo "  $n/37 pushed: $message"
+  echo "  $n/$total pushed: $message"
 done <<'QUEUE'
-calibration/claude-opus-5-20260809T162804+0000-draw10.json|calibration: claude-opus-5, draw 10 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163416+0000-draw1.json|calibration: claude-opus-5, draw 1 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163457+0000-draw2.json|calibration: claude-opus-5, draw 2 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163524+0000-draw3.json|calibration: claude-opus-5, draw 3 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163556+0000-draw4.json|calibration: claude-opus-5, draw 4 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163618+0000-draw5.json|calibration: claude-opus-5, draw 5 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163648+0000-draw6.json|calibration: claude-opus-5, draw 6 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163715+0000-draw7.json|calibration: claude-opus-5, draw 7 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163744+0000-draw8.json|calibration: claude-opus-5, draw 8 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163816+0000-draw9.json|calibration: claude-opus-5, draw 9 of a v2-candidate sweep
-calibration/claude-opus-5-20260809T163850+0000-draw10.json|calibration: claude-opus-5, draw 10 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T182928+0000-draw1.json|calibration: claude-sonnet-5, draw 1 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T183125+0000-draw2.json|calibration: claude-sonnet-5, draw 2 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T183310+0000-draw3.json|calibration: claude-sonnet-5, draw 3 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T183440+0000-draw4.json|calibration: claude-sonnet-5, draw 4 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T183557+0000-draw5.json|calibration: claude-sonnet-5, draw 5 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T183821+0000-draw6.json|calibration: claude-sonnet-5, draw 6 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T184254+0000-draw7.json|calibration: claude-sonnet-5, draw 7 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T184431+0000-draw8.json|calibration: claude-sonnet-5, draw 8 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T184614+0000-draw9.json|calibration: claude-sonnet-5, draw 9 of a v2-candidate sweep
-calibration/claude-sonnet-5-20260809T184800+0000-draw10.json|calibration: claude-sonnet-5, draw 10 of a v2-candidate sweep
-tests/test_runner.py|tests: calibration, the warm-up set, partial draws, per-draw workdirs and the set filter
-.github/workflows/ci.yml|ci: calibration blocks reproduce from their own draws
-leaderboard/claude-sonnet-5-20260809-draw1.json|leaderboard: claude-sonnet-5 on the laptop tier, draw 1 of 5
-leaderboard/claude-sonnet-5-20260809-draw2.json|leaderboard: claude-sonnet-5 on the laptop tier, draw 2 of 5
-leaderboard/claude-sonnet-5-20260809-draw3.json|leaderboard: claude-sonnet-5 on the laptop tier, draw 3 of 5
-leaderboard/claude-sonnet-5-20260809-draw4.json|leaderboard: claude-sonnet-5 on the laptop tier, draw 4 of 5
-leaderboard/claude-sonnet-5-20260809-draw5.json|leaderboard: claude-sonnet-5 on the laptop tier, draw 5 of 5
-leaderboard/README.md|leaderboard: a third model on the v1 laptop tier, and a draw that measured seven of eight
-TASK_FORMAT.md|Task format: frozen sets, calibration, and where the draws live
-CONTRIBUTING.md|Contributing: how to calibrate a task, and what a refusal means
-docs/V2_DESIGN.md|Design: the property the criterion was missing, and what v2 contains
-docs/LESSONS.md|Lessons: a design claim no test could keep, a half-empty error bar, and the wrong property
-docs/sessions/10-calibrating-against-models.md|Journal 10: calibrating against models instead of against me
-README.md|README: the next set has to earn its place, and the first three did not
-CLAUDE.md|Update state after the first calibrated tasks
+tasks/metal_cross_entropy_kernel/meta.yaml|metal_cross_entropy_kernel: metadata, and the first calibration block a numbered set accepted
+leaderboard/README.md|leaderboard: the Metal row, the failures by name, and what v1 means after today
+README.md|README: the kernels row stops promising Metal and starts reporting it
+CONTRIBUTING.md|CONTRIBUTING: the Metal half of the accelerated evidence runs on a laptop
+docs/V2_DESIGN.md|V2_DESIGN: the accelerated tier got its second task, and the three under review moved
+docs/LESSONS.md|Lessons: a mutant that was a correct program, a race the hardware hides, a kernel that skips the kernel, and one reserved word
+docs/sessions/11-a-metal-kernel-on-the-machine-i-already-have.md|Journal 11: a Metal kernel on the machine I already have
+CLAUDE.md|Update state after the first task a frontier model fails
 COMMITS.md|Update commit queue
 QUEUE
 ```
 
-Then confirm:
+#### After the last push
 
 ```bash
 cd ~/scratchbench
 
 git status --porcelain              # expect: empty
-git log --oneline | wc -l           # expect 223
+git log --oneline | wc -l           # expect 272
 python -m pytest -q                 # expect 103 passed
-python -m runner.cli validate       # expect 11 task(s) validated
-python tools/check_cost.py          # expect 27 file(s) checked
-python tools/check_calibration.py   # expect 9 calibration entries re-derived
+python -m runner.cli validate --tier all   # expect 12 validated, 1 not checked here
+python tools/check_cost.py          # expect 57 file(s) checked
+python tools/check_calibration.py   # expect 21 calibration entries
+python tools/mutate_metal_task.py   # expect all 13 mutants as expected
 gh run list --limit 3               # expect success
 ```
 
 ## Committed
+
+### 2026-08-13 — session 10, a hundred and one commits
+
+The three v2 candidates written end to end, the calibration machinery that
+refused all three, and the 65 draws that refusal was computed from. Written on
+2026-08-09 and queued; the queue ran on 2026-08-13 in three groups of about
+thirty-four, one push per commit, every run green. `main` at 223 commits.
+
+The group boundaries were the two ordering constraints, not tidiness: all 65
+calibration draws had to land before `tests/test_runner.py`, which re-derives
+every block from them, and the `check_calibration.py` step in `ci.yml` had to
+land after both the tool and the draws.
 
 ### 2026-08-09 — session 09, twenty-two commits
 
