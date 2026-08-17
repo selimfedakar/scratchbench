@@ -1,0 +1,51 @@
+{
+  "results_version": 2,
+  "harness_version": "0.1.0",
+  "model": "claude-haiku-4-5",
+  "run_at": "2026-08-13T21:40:34+00:00",
+  "task_set": "unvalidated",
+  "headline_tier": "laptop",
+  "pass_rate": null,
+  "measured": 0,
+  "not_measured": 1,
+  "pass_rate_by_category": {},
+  "pass_rate_by_tier": {
+    "accelerated": {
+      "pass_rate": null,
+      "solved": 0,
+      "measured": 0,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 1,
+      "categories": {}
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-haiku-4-5-20260813T212947",
+    "index": 10,
+    "of": 10
+  },
+  "wall_clock_s": 45.78,
+  "usd_cost": null,
+  "tokens": null,
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "metal_cross_entropy_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "adapter_error",
+      "duration_s": 45.78,
+      "counts": {},
+      "detail": "APIStatusError: {'type': 'error', 'error': {'details': None, 'type': 'overloaded_error', 'message': 'Overloaded'}, 'request_id': 'req_011Ce1UN8wNT4hMhqVaJzsto'}"
+    }
+  ]
+}
