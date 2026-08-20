@@ -62,6 +62,12 @@ FIRST_CALIBRATED_SET = 2
 #: model on the same task has passed once and failed once (L19).
 CALIBRATION_MIN_DRAWS = 5
 
+#: How many measured entries the admission rule reads, and therefore the
+#: minimum a numbered set requires. One model is not the frontier: a task the
+#: single strongest model clears can still be the only task in the repository
+#: that separates the model below it from the model above (docs/LESSONS.md L35).
+CALIBRATION_TOP_N = 2
+
 REQUIRED_CALIBRATION_KEYS = {"model", "draws", "passed", "date"}
 
 
@@ -261,9 +267,16 @@ def _check_admission(meta_path: Path, frozen_set: str, calibration: tuple[Calibr
     v1's difficulty numbers were assigned by how hard each task felt to write,
     and then a frontier model solved every one of them on the first attempt
     (docs/LESSONS.md L21). So from v2 onward a task earns its place by having
-    been asked of models, and a task that everything solves every time is
-    refused: it costs a sweep and tells nobody anything. It can live in a
-    warm-up set. It cannot be in the headline.
+    been asked of models, and a task the frontier clears is refused: it costs a
+    sweep and tells nobody anything. It can live in a warm-up set. It cannot be
+    in the headline.
+
+    The frontier is read as the top two measured entries rather than the single
+    best one. A rule that reads one entry treats the strongest model as the
+    field, and it refused the one laptop task in this repository that separated
+    `claude-sonnet-5` from `claude-opus-5` (docs/LESSONS.md L35). Entries with
+    fewer than CALIBRATION_MIN_DRAWS draws are not read at all: a measurement
+    too small to admit a task is too small to refuse one either.
     """
     numbered = CALIBRATED_SET.match(frozen_set)
     if not numbered or int(numbered.group(1)) < FIRST_CALIBRATED_SET:
@@ -276,17 +289,26 @@ def _check_admission(meta_path: Path, frozen_set: str, calibration: tuple[Calibr
             "assigned by feel"
         )
 
-    best = max(calibration, key=lambda entry: (entry.rate, entry.draws))
-    if best.passed == best.draws:
+    measured = sorted(
+        (entry for entry in calibration if entry.draws >= CALIBRATION_MIN_DRAWS),
+        key=lambda entry: (entry.rate, entry.draws),
+        reverse=True,
+    )
+    if len(measured) < CALIBRATION_TOP_N:
         raise TaskError(
-            f"{meta_path}: {best.model} passed all {best.draws} draws, so this task cannot "
-            f"be in '{frozen_set}' — a task everything solves adds cost and no information"
+            f"{meta_path}: {len(measured)} calibration entr"
+            f"{'y' if len(measured) == 1 else 'ies'} with {CALIBRATION_MIN_DRAWS} draws or "
+            f"more, and '{frozen_set}' needs {CALIBRATION_TOP_N} — fewer draws than that "
+            "cannot tell a hard task from an unlucky one, and one model is not a field"
         )
 
-    if not any(entry.draws >= CALIBRATION_MIN_DRAWS for entry in calibration):
+    top = measured[:CALIBRATION_TOP_N]
+    if all(entry.passed == entry.draws for entry in top):
+        cleared = ", ".join(f"{entry.model} {entry.passed}/{entry.draws}" for entry in top)
         raise TaskError(
-            f"{meta_path}: no calibration entry has {CALIBRATION_MIN_DRAWS} draws or more, "
-            "and fewer than that cannot tell a hard task from an unlucky one"
+            f"{meta_path}: the top of the field cleared this task ({cleared}), so it cannot "
+            f"be in '{frozen_set}' — a task the frontier never fails adds cost and no "
+            "information"
         )
 
 
