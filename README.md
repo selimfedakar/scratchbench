@@ -186,10 +186,11 @@ See [`TASK_FORMAT.md`](TASK_FORMAT.md) for the full contract, and [`CONTRIBUTING
 | `sharded_dataloader` | warmup | data | 4 | 53 | stride not slab, disjoint ranks, resumable mid-epoch |
 | `quantization_error_bounds` | warmup | numerics | 4 | 65 | per-channel scales, clipping, the error you promised |
 | `online_softmax_attention` | v1 | attention | 5 | 57 | tiled attention with a running max and rescale |
-| `fused_rmsnorm_kernel` ⚡ | v1 | kernels | 4 | 24 | a real Triton reduction, not a PyTorch one-liner |
+| `flash_attention_backward` | v2 | attention | 5 | 49 | a derived backward, and the row term that is not blockwise |
+| `fused_rmsnorm_kernel` ⚡ | v2 | kernels | 4 | 24 | a real Triton reduction, not a PyTorch one-liner |
 | `metal_cross_entropy_kernel` ⚡ | v2 | kernels | 4 | 68 | a Metal threadgroup reduction at a group size it does not choose |
 
-**`v1` is five laptop tasks and it was eight when the rows above were measured.** `attention_causal_mask`, `sharded_dataloader` and `quantization_error_bounds` moved to `warmup` on 2026-08-13, on the draws already published rather than on new ones: three models, six draws each for two of them, and only Haiku ever failed one. A task that everything solves is not wrong, it has stopped measuring, and the rule that says so is below.
+**`v1` is five laptop tasks and it was eight, plus the CUDA kernel, when the rows above were measured.** `attention_causal_mask`, `sharded_dataloader` and `quantization_error_bounds` moved to `warmup` on 2026-08-13, on the draws already published rather than on new ones: three models, six draws each for two of them, and only Haiku ever failed one. A task that everything solves is not wrong, it has stopped measuring, and the rule that says so is below. `fused_rmsnorm_kernel` moved the other way on 2026-08-17, out of `v1` and into `v2`, on its own published draws: Opus solves 1 of 5, which is the lowest frontier rate in the repository.
 
 ⚡ = `accelerated` tier: needs a GPU — CUDA for the Triton task, Metal for the other, which is to say any Apple silicon Mac. Reported beside the laptop rate and **never folded into it**. On a machine without the hardware it comes back `needs_accelerator` — not a pass, not a failure, an absence of evidence, and it stays out of every percentage rather than being rounded down to zero.
 
@@ -207,17 +208,19 @@ calibration:
     date: 2026-08-09
 ```
 
-**A task whose best result is a clean sweep cannot be in a numbered set.** The loader refuses it — not a warning, a `TaskError` — because a task that everything solves costs a sweep and returns no information. It goes to `frozen_set: warmup`, where it still separates a small model from a large one and stays out of the headline. `TASK_FORMAT.md` has the table.
+**A task the top of the field clears cannot be in a numbered set.** The loader refuses it — not a warning, a `TaskError` — because a task that the frontier never fails costs a sweep and returns no information. It goes to `frozen_set: warmup`, where it still separates a small model from a large one and stays out of the headline. Concretely: a numbered set needs two calibration entries of five draws or more, and the highest two pass rates among them must not both be 100%. `TASK_FORMAT.md` has the table.
 
-The first three tasks written against that rule were refused by it:
+That rule read *one* entry until 2026-08-17 — the single best model — and this is what happened to the first three tasks written against it:
 
-| Task | Category | Tests | Opus 5 | Sonnet 5 | Haiku 4.5 | What it probes |
+| Task | Set | Tests | Opus 5 | Sonnet 5 | Haiku 4.5 | What it probes |
 |---|---|---:|---:|---:|---:|---|
-| `speculative_decoding_verify` | attention | 24 | 15/15 | 10/10 | 10/20 | accept-and-correct, graded on the output distribution |
-| `flash_attention_backward` | attention | 49 | 15/15 | **8/10** | 3/19 | a derived backward, and the row term that is not blockwise |
-| `activation_checkpointing_rng` | training | 34 | 10/10 | 10/10 | 1/10 | recomputation that puts the generator back where it found it |
+| `speculative_decoding_verify` | warmup | 24 | 15/15 | 10/10 | 10/20 | accept-and-correct, graded on the output distribution |
+| `flash_attention_backward` | **v2** | 49 | 15/15 | **8/10** | 3/19 | a derived backward, and the row term that is not blockwise |
+| `activation_checkpointing_rng` | warmup | 34 | 10/10 | 10/10 | 1/10 | recomputation that puts the generator back where it found it |
 
-Every draw behind those numbers is checked in under [`calibration/`](calibration/), and `tools/check_calibration.py` re-derives all nine entries from them on every push. A figure that decides whether a task is allowed into a frozen set is not allowed to be the one figure nobody can reproduce.
+All three were refused. Two of them deserved it: Opus and Sonnet both sweep them, and a task two frontier models clear has stopped measuring the frontier. The middle one did not. Sonnet loses two draws of ten to it, which makes it the only task on the laptop tier that separates one frontier model from another — and the rule threw it out on Opus's account, because it equated *the top of the field* with *the strongest model in it*. Reading the top two entries instead moves exactly one task in the whole repository, which is that one. The uncomfortable part — that a rule was rewritten after it refused something its author liked, and that an earlier journal had already decided the other way — is written up as `docs/LESSONS.md` L35 rather than smoothed over here.
+
+Every draw behind those numbers is checked in under [`calibration/`](calibration/) and [`leaderboard/`](leaderboard/), and `tools/check_calibration.py` re-derives all twenty-three entries from them on every push. A figure that decides whether a task is allowed into a frozen set is not allowed to be the one figure nobody can reproduce.
 
 All three were built the way the design document asked for: the obvious answer forbidden, a property that is provable rather than plausible, mechanism that composes. `speculative_decoding_verify` never states the acceptance rule, only the guarantee it exists to provide, and grades the emitted tokens against the target distribution over two hundred thousand draws. `flash_attention_backward` hands the graded function one block of keys and never the rest, so the correction term that belongs to a whole query row cannot be accumulated from the block in hand. `activation_checkpointing_rng` compares generator state byte for byte, so an implementation that recomputes correctly and leaves the random stream rewound fails while its gradients are perfect. All three catch every wrong implementation written against them — twenty-eight mutants, twenty-eight caught.
 
@@ -231,7 +234,7 @@ And Opus 5 passed all three, forty draws out of forty. The other two did not, an
 
 Sonnet's `2 failed, 47 passed` is the signature of a mutant written for this task weeks before Sonnet was asked anything — *queries not put at the end of the key range*. A real model reproduced one of the invented wrong implementations, exactly, twice.
 
-### The first task the rule let in
+### The first task the rule let in on its own numbers
 
 `metal_cross_entropy_kernel`, written on 2026-08-13 against the corrected criterion — the difficulty is a fact about a tool, and an obscure one — is the first task in this repository that a frontier model fails.
 
