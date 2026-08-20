@@ -136,10 +136,12 @@ python tools/check_calibration.py
 Ten draws rather than five if you can afford them: two independent five-draw
 sweeps of the same model on the same task have come back 2/5 and 5/5 here.
 
-The loader refuses the task if the best model you tried passed every draw. That
-is not a bug report — it means the task belongs in `frozen_set: warmup`, where it
-keeps its block and stays out of the headline. Three tasks have gone there
-already and the reasoning is in `docs/LESSONS.md` L30.
+Two models, not one. The loader refuses the task if the **top two** models you
+tried both passed every draw, and it needs two entries of five draws or more
+before it will read anything at all. A refusal is not a bug report — it means the
+task belongs in `frozen_set: warmup`, where it keeps its block and stays out of
+the headline. Five tasks are there now, the reasoning is in `docs/LESSONS.md`
+L30, and why the rule reads two entries rather than one is L35.
 
 Keep the per-draw workdirs (`--keep`) and say which tests failed, by name. `1 of
 24` and `24 of 24` are the same verdict and completely different results, and
