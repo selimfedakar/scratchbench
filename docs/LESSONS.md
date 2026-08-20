@@ -13,6 +13,81 @@ Newest first.
 
 ---
 
+## L35 — I changed the admission rule after it refused a task I liked
+
+**What I expected.** The rule I wrote in section 4 of `V2_DESIGN.md` was meant
+to stop me admitting tasks on my own estimate of difficulty, and it reads one
+number: the highest pass rate in the calibration block. If the strongest model
+tried never failed, the task is out. I expected that to be the whole of it,
+because the failure it was written against — v1's difficulty numbers being a
+measurement of me — has exactly that shape.
+
+**What happened.** It refused `flash_attention_backward`. `claude-opus-5` passes
+it 15 times out of 15, and `claude-sonnet-5` loses two draws of ten, both times
+to the same pair of tests, matching a mutant's signature exactly. That is the
+only task on the laptop tier in this repository that separates one frontier model
+from another, and it is precisely the discrimination v2 exists to buy. The rule
+threw it into the warm-up set beside two tasks that Opus and Sonnet both clear
+completely, which are not the same kind of object at all.
+
+**Where I nearly went wrong, twice.** The first is obvious and it is the reason
+this entry exists: *a rule that refuses a result I like is the one moment where
+changing the rule is most likely to be motivated reasoning, and it feels exactly
+like noticing a flaw.*
+
+The mitigation I reached for first does not hold up, and I am writing it down
+because I believed it for an hour. I told myself the tension was already on
+record in `docs/sessions/10`, written on 2026-08-09 before there was any second
+task to lose by it. It is on record — and reading it again, that journal does not
+merely name the tension, it **argues for the strict rule and keeps it**: Sonnet's
+failure there is called a convention missed at the edge rather than a mechanism
+absent, the task is left in `warmup` deliberately, and the entry sets a revisit
+condition — *when there is a model between Sonnet and Opus to lose*. That
+condition has not been met. No new model has appeared. So the prior writing is
+not permission; it is a decision I am now overturning without the trigger I gave
+myself, and this entry has to say so in those words or it is a changelog wearing
+a lesson's clothes.
+
+What actually justifies overturning it is one line of that old argument, and it
+is the line I wrote myself: *convention noise is not the axis a headline set
+should be scaling.* The admission rule cannot see the difference between
+convention noise and an absent mechanism. I can. So "Sonnet only missed a
+convention, keep the task out" is my judgement of a task's difficulty deciding
+its admission — which is the exact channel L21 closed and the entire reason the
+calibration block exists. The old rule's stated intent is that the headline set
+ranks the top of the field; with three models measured as a matter of course,
+reading one entry does not implement that intent, it implements "the strongest
+model is the field". The revision is narrower than my first reading of it: not
+"the rule was too strict" but "the rule read one number where its own sentence
+says field".
+
+The second near-miss is the version of the fix that sounds better and is worse.
+My first draft of the new rule was "admit a task if any two models differ on
+it". That reads well, and it readmits nearly all of v1: `grad_accumulation`
+separates `claude-haiku-4-5` (0 of 6) from `claude-opus-5` (6 of 6) and
+`claude-sonnet-5` (5 of 5), which is the definition of a warm-up task. A rule
+that admits everything I already had is L21 again with extra steps, and it took
+running the numbers on the existing blocks to see that the appealing rule was
+the one that undid the whole exercise.
+
+**What changed.** The rule now reads the **top two** measured entries and
+refuses a task only when both are at 100%, which is the smallest change that
+distinguishes "the frontier cleared this" from "the strongest model cleared
+this". Entries with fewer than five draws are read on neither side — a
+measurement too small to admit a task is too small to refuse one — and a
+numbered set now needs two entries of five draws or more rather than one.
+Applied to the twenty-one calibration entries that existed the day it changed,
+it moves exactly one task, `flash_attention_backward` from `warmup` to `v2`,
+which is the strongest evidence I have that it is a correction and not a
+loophole: a rule rewritten to get a result usually gets several.
+
+**What it cost.** No draws and no dollars — every number it turns on was already
+published. What it cost is that this entry has to exist; that a "revisit if"
+condition I set for myself turned out to be worth less than the argument
+underneath it, which means the next one needs to name the argument rather than a
+future model; and that "the rule is too narrow" is now a sentence I have used
+once and have to earn again.
+
 ## L34 — The compile error I fixed in thirty seconds was the task
 
 **What I expected.** Writing the reference for the Metal task, my first draft
