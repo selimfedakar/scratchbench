@@ -57,6 +57,7 @@ Python is Anaconda 3.10 at `/Users/selimfedakar/anaconda3/bin/python3`.
 |---|---|
 | `README.md` | the pitch. Design is locked — implement it, do not redesign it. |
 | `TASK_FORMAT.md` | the task contract. Also locked. Read before writing any task. |
+| `docs/ROADMAP.md` | **every remaining session from here to launch, one section each.** Open the section for the session you are in and work it; its *Preconditions* are a stop condition, not a formality. |
 | `tasks/<slug>/` | one task: `meta.yaml`, `prompt.md`, `starter/`, `hidden_tests/`, `reference/` |
 | `runner/tasks.py` | task discovery and `meta.yaml` validation |
 | `runner/sandbox.py` | temp workdir assembly, seeding, timeout, pytest invocation, **and `STATUSES`: the one table saying which outcomes count as evidence** |
@@ -170,7 +171,7 @@ that the best model tried never fails is refused by the loader. See
 Every step of the build gets a short entry in `docs/sessions/NN-title.md`, in
 English, first person: what was done, why, which technology carries it, and
 what was verified with pasted output. Written as the step finishes, not
-retrospectively. 00 through 10 exist; the next one is 11.
+retrospectively. 00 through 12 exist; the next one is 13.
 
 `docs/LESSONS.md` is the other half and it is **mandatory, every session**:
 what I got wrong, in my own voice, newest first. Not a changelog — the entries
@@ -211,6 +212,58 @@ computed over. `accelerated` may set `requires_gpu: true` and must declare
 folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
+
+## State as of 2026-08-17, session 12 (verify before trusting)
+
+- **The admission rule reads the top two calibration entries, not the best one.**
+  A numbered set from `v2` onward now needs two entries of five draws or more and
+  refuses the task only if the highest two pass rates are **both 100%**. Entries
+  under five draws are read on neither side, which is the absence-of-evidence
+  rule one column over. `_check_admission` in `runner/tasks.py`;
+  `CALIBRATION_TOP_N = 2` beside `CALIBRATION_MIN_DRAWS = 5`.
+- **It moves exactly one task.** `flash_attention_backward` goes `warmup` → `v2`
+  on Opus 15/15 with Sonnet 8/10. `speculative_decoding_verify` and
+  `activation_checkpointing_rng` stay in `warmup` — Opus *and* Sonnet clear both.
+- **`fused_rmsnorm_kernel` moved `v1` → `v2` in the same session, and it is not
+  a consequence of the rule change** — it clears the old rule too. Opus 1/5,
+  Haiku 3/5, from the 2026-08-09 RTX 4000 Ada sweep already in `leaderboard/`;
+  the only thing missing was a `calibration:` block. Sonnet has never been asked
+  it (rented box). Lowest frontier rate in the repository.
+- **`v2` has three of its four intended members:** `flash_attention_backward`
+  (laptop), `fused_rmsnorm_kernel` (accelerated, cuda),
+  `metal_cross_entropy_kernel` (accelerated, metal). The fourth is a second Metal
+  task, not written. Set counts today: `v1` **five** (all laptop, no accelerated
+  member), `v2` **three**, `warmup` **five**.
+- **The rule changed after it refused a task I liked, and journal 10 had
+  already decided the other way.** That entry argued *for* the strict rule and
+  set a revisit condition — a model between Sonnet and Opus — which has **not**
+  been met. The overturn rests on the other half of its own argument: the loader
+  cannot tell convention noise from an absent mechanism, only the author can, and
+  admitting on the author's reading is the channel L21 closed. `docs/LESSONS.md`
+  **L35** is the honest version; journal 12 carries the tables.
+- **Rejected:** "admit a task if any two models differ". `grad_accumulation`
+  separates Haiku (0 of 6) from Opus (6 of 6) and Sonnet (5 of 5), and so does
+  most of v1 — that rule readmits everything L21 was written about.
+- Numbers from this session's runs: harness suite **105 passed** (two tests
+  added, one rewritten); `validate --tier all` **12 task(s) validated, 1 not
+  checked here**; control run **laptop 100% (11/11) · accelerated 100% (1/1)** in
+  25.3s; `check_cost.py` **57 file(s) checked**; `check_calibration.py` **23
+  calibration entries re-derived from 122 draw(s)**;
+  `tools/mutate_metal_task.py` **all 13 mutants behaved as expected**.
+- **No model was asked anything.** Every rate above is a published draw from
+  2026-08-09 or 2026-08-13. Spend this session: **$0**.
+- **Still open, and `docs/ROADMAP.md` is now the plan of record for all of it.**
+  `v2` is three tasks and still being assembled rather than published, so there
+  is no v2 leaderboard row and **no `--set v2` sweep has ever been run** — the
+  three members' draws come from three different days against three different
+  task sets.
+- **The gating problem, written down for the first time in `ROADMAP.md` §0.1:
+  `v2` has exactly one laptop task**, and the leaderboard headline is the laptop
+  tier by design (`HEADLINE_TIER` in `runner/report.py`). A headline over one
+  task is not a benchmark. The next session's first job is the decision in
+  `ROADMAP.md` §1.2 — recommended: keep the tiers and hold `v2` back until its
+  laptop half is real — and that decision determines which tier the next task is
+  written for, so it comes before any task writing.
 
 ## State as of 2026-08-13, session 11 (verify before trusting)
 
