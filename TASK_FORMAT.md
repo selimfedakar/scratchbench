@@ -38,7 +38,7 @@ getting into one is something a task has to earn:
 |---|---|
 | `unvalidated` | not finished. Its reference has never passed, usually because the hardware to run it on is somewhere else. Out of the leaderboard. |
 | `v1` | the first set. Published as what it is: difficulty numbers assigned by how hard each task felt to write, before any model had been asked. |
-| `warmup` | finished, verified, and solved by everything at the top. Useful for separating small models from large ones, and it measures nothing at the frontier, so it stays out of the headline. |
+| `warmup` | finished, verified, and solved by the top of the field. Useful for separating small models from large ones, and it measures nothing at the frontier, so it stays out of the headline. |
 | `v2`, `v3`, … | calibrated. Carries the block below, and is refused without it. |
 
 ```yaml
@@ -54,13 +54,24 @@ calibration:
 ```
 
 Each entry is one model asked the same question several independent times —
-draws, not retries. A numbered set from `v2` onward requires at least one entry,
-at least one entry with five draws or more, and **no entry in which a model
-passed every draw**. That last rule is the whole point: a task the best thing
-you tried never fails is a task that has stopped measuring, it costs a sweep and
-returns no information, and it belongs in `warmup`. The loader refuses the task
-outright rather than warning, because a benchmark that admits tasks on the
-author's estimate of difficulty is measuring the author (`docs/LESSONS.md` L21).
+draws, not retries. A numbered set from `v2` onward requires **two entries of
+five draws or more**, and that **the highest two pass rates among them are not
+both 100%**.
+
+That second clause is the whole point: a task the frontier never fails has
+stopped measuring, it costs a sweep and returns no information, and it belongs
+in `warmup`. The loader refuses it outright rather than warning, because a
+benchmark that admits tasks on the author's estimate of difficulty is measuring
+the author (`docs/LESSONS.md` L21).
+
+The rule reads two entries rather than one, and that is a correction dated
+2026-08-17. Reading only the strongest model treats it as the whole field, which
+refused `flash_attention_backward` — a task `claude-opus-5` passes 15 times out
+of 15 and `claude-sonnet-5` loses two draws of ten to, and therefore the only
+task on the laptop tier that separates one frontier model from another
+(`docs/LESSONS.md` L35). Entries with fewer than five draws are not read at all,
+on either side: a measurement too small to admit a task is too small to refuse
+one.
 
 `difficulty` stays in the file and stops being an opinion once a calibration
 block exists beside it: the number is then a summary of that block, not a
