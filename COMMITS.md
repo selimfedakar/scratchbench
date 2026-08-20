@@ -15,33 +15,55 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 
 ## Pending
 
-### Session 11 tail — the launch surface
+### Session 12 — the admission rule reads the top two
 
-The repository had no description and no topics on GitHub until 2026-08-17;
-both are set now through the API and neither is a file in the tree. What is a
-file is the badge row, which is the only place a reader learns that CI is green
-before they clone.
+Sixteen commits, fifteen pushes, sixty seconds between them. The runnable form
+is a script outside the repository, because it is long enough that pasting it
+into a terminal in two halves is how a queue gets half-run:
 
 ```bash
-cd ~/scratchbench
-set -e
-
-n=0
-while IFS='|' read -r file message; do
-  if [ -z "$file" ]; then continue; fi
-  n=$((n + 1))
-  if [ "$n" -gt 1 ]; then sleep 60; fi
-  git add "$file"
-  git commit -q -m "$message"
-  git push origin main
-  echo "  $n/2 pushed: $message"
-done <<'QUEUE'
-README.md|README: the badges say what the CI already knew
-COMMITS.md|Update commit queue
-QUEUE
+bash ~/scratchbench-session12-commits.sh
 ```
 
+**Push 1 carries two commits on purpose, and this is the part not to "fix".**
+`runner/tasks.py` and `tests/test_runner.py` are a **coupled pair**: with one
+file per push, whichever lands first leaves a tip where the tests describe a
+rule the loader does not implement, and CI goes red on a commit that is not
+wrong. One file per commit is untouched — both are separate commits — but they
+travel in one push. That is `docs/LESSONS.md` L17 applied on purpose rather than
+after the fact.
+
+Every push retries three times: on 2026-08-17 GitHub answered a valid credential
+with `Invalid username or token` while returning 503 on the API. A push failure
+is not an authentication failure.
+
+The order, and the tip after each one is green:
+
+| # | Files | Commit message |
+|---:|---|---|
+| 1 | `runner/tasks.py` **+** `tests/test_runner.py` | the rule, then its tests (two commits, one push) |
+| 2 | `tasks/flash_attention_backward/meta.yaml` | flash_attention_backward earns v2 on Sonnet's two lost draws |
+| 3 | `tasks/fused_rmsnorm_kernel/meta.yaml` | fused_rmsnorm_kernel carries the draws that qualified it for v2 |
+| 4 | `tasks/speculative_decoding_verify/meta.yaml` | Say which two models cleared speculative_decoding_verify |
+| 5 | `tasks/activation_checkpointing_rng/meta.yaml` | Say which two models cleared activation_checkpointing_rng |
+| 6 | `TASK_FORMAT.md` | The contract states the two-entry admission rule |
+| 7 | `README.md` | The README says which task the rule was rewritten for |
+| 8 | `CONTRIBUTING.md` | Calibrate against two models, because one is not a field |
+| 9 | `leaderboard/README.md` | The CUDA rows say which set their task moved to |
+| 10 | `docs/V2_DESIGN.md` | V2_DESIGN records the revision and what it rejected |
+| 11 | `docs/LESSONS.md` | L35: I changed the admission rule after it refused a task I liked |
+| 12 | `docs/sessions/12-the-rule-that-read-one-model.md` | Journal 12: the rule that read one model |
+| 13 | `docs/ROADMAP.md` | A roadmap: every remaining session from here to launch |
+| 14 | `CLAUDE.md` | Update state after the admission rule widened |
+| 15 | `COMMITS.md` | Update commit queue |
+
 ## Committed
+
+### 2026-08-17 — session 11 tail, two commits
+
+The GitHub description and topics were set through the API, which leaves no file
+in the tree; the badge row in `README.md` is the part that does. Both commits
+pushed a minute apart, both runs green, `main` at 274 commits.
 
 ### 2026-08-17 — session 11, forty-nine commits
 
