@@ -258,9 +258,9 @@ calibration:
     date: 2026-08-10
 ```
 
-and it is **refused** if the strongest model tried passed every draw. A task
-that everything solves adds cost and no information; it can live in a warm-up
-set, not in the headline.
+and it is **refused** if the top of the field cleared it. A task the frontier
+never fails adds cost and no information; it can live in a warm-up set, not in
+the headline.
 
 Note that `difficulty` then stops being an opinion and becomes a summary of
 that block. The number in v1 stays as it is, labelled for what it was.
@@ -272,14 +272,43 @@ blind spot — that is L11, exactly, and it published wrong numbers twice. So th
 were real tasks to hold them to, and the rule then refused the first two tasks
 it was pointed at, which is the only way to know it does anything.
 
-As implemented, "the strongest model tried" is read off the block rather than
-declared: the entry with the highest pass rate is the one the rule looks at, and
-if that entry passed every draw the loader refuses the task outright. A numbered
-set from `v2` onward also needs at least one entry of five draws or more,
-because one draw is not a measurement of a sampled process (L19). `v1` is exempt
-by name — it predates the rule and is published as what it was. Tasks that fail
-the bar go to `frozen_set: warmup`, which keeps the calibration block and stays
-out of the headline. `TASK_FORMAT.md` has the table.
+As implemented, "the top of the field" is read off the block rather than
+declared: entries are ranked by pass rate and the loader refuses the task if the
+**highest two are both 100%**. A numbered set from `v2` onward therefore needs
+two entries of five draws or more, because one draw is not a measurement of a
+sampled process (L19) and one model is not a field. `v1` is exempt by name — it
+predates the rule and is published as what it was. Tasks that fail the bar go to
+`frozen_set: warmup`, which keeps the calibration block and stays out of the
+headline. `TASK_FORMAT.md` has the table.
+
+**Revised on 2026-08-17, and the revision is the uncomfortable kind.** The rule
+above originally read one entry: the single highest pass rate, refused if it was
+100%. That refused `flash_attention_backward`, which `claude-opus-5` passes 15
+of 15 and `claude-sonnet-5` loses two draws of ten to — the only task on the
+laptop tier that separates two frontier models, and exactly the discrimination
+v2 exists to buy.
+
+`docs/sessions/10` saw the tension and **kept the strict rule**, on the grounds
+that Sonnet's failure there is a convention missed at the edge rather than an
+absent mechanism, with a revisit condition — a model between Sonnet and Opus —
+that has not been met. That decision is overturned here rather than satisfied,
+and the reason is the other half of its own argument: the loader cannot tell
+convention noise from an absent mechanism, only the author can, and admitting a
+task on the author's reading of its failures is the channel L21 closed. The
+rule's stated intent is that a headline set ranks the top of the *field*; with
+three models measured as a matter of course, one entry is not a field. See
+`docs/LESSONS.md` L35, which is the honest version of this paragraph.
+
+Applied to the twenty-one calibration entries that existed when it changed, it
+moves exactly one task: `flash_attention_backward` from `warmup` to `v2`.
+
+What was **rejected**, and it is the version that sounds better: "admit a task
+if any two models differ". `grad_accumulation` separates `claude-haiku-4-5`
+(0 of 6) from both larger models (`claude-opus-5` 6 of 6, `claude-sonnet-5` 5 of
+5), and so does most of v1 — that rule readmits the entire v1 set and repeats
+L21 with extra steps. Separating a small
+model from a large one is the definition of `warmup`. The frontier is the top of
+the field, and the top of the field is where a headline set has to bite.
 
 ## 5. What v2 is made of
 
@@ -296,19 +325,31 @@ out of the headline. `TASK_FORMAT.md` has the table.
   and the 2026-08-03 sweep a sixth for Opus and Haiku. All three are
   `frozen_set: warmup` with the block re-derived from `leaderboard/`, so `v1` is
   five laptop tasks now and was eight when its rows were measured.
-- **New: nothing yet, and that is a measurement rather than a delay.** Three of
-  the candidates above were written end to end on 2026-08-09 —
+- **New, and two of the three came back. Revised 2026-08-17.** Three of the
+  candidates above were written end to end on 2026-08-09 —
   `speculative_decoding_verify`, `flash_attention_backward` and
   `activation_checkpointing_rng` — and all three were refused by the admission
   rule in section 4, because `claude-opus-5` passed 15, 15 and 10 draws
-  respectively without a single failure. They are `frozen_set: warmup`. They
-  separate Opus from Haiku by a wide margin, their failure shapes are the most
+  respectively without a single failure. Under the revised rule
+  **`flash_attention_backward` is in `v2`**: `claude-sonnet-5` loses two draws of
+  ten to it, so the top two entries are not both at the ceiling. The other two
+  stay in `frozen_set: warmup`, where Opus and Sonnet both clear them. They
+  separate Haiku from both by a wide margin, their failure shapes are the most
   informative thing in the repository after the kernel task, and they do not
   measure at the top. Section 2.0 is what that cost buys.
 
   The five remaining candidates are all reasoning tasks of the same kind, so
   writing them against the same criterion has a known answer. Anything new on
   the laptop tier has to clear 2.0 first or it is a fourth warm-up task.
+- **`fused_rmsnorm_kernel` moved from `v1` into `v2` on 2026-08-17**, on the
+  five-draw sweep of 2026-08-09 that was already published: `claude-opus-5` 1 of
+  5, `claude-haiku-4-5` 3 of 5. It is the lowest frontier pass rate in the
+  repository and the task section 1b was written about, so it belonged in the
+  set that replaces v1 from the day that section was written; what it was
+  missing was a `calibration:` block, and the block is a re-derivation rather
+  than a new measurement. `claude-sonnet-5` has never been asked it, because
+  asking costs a rented CUDA box.
+
 - **Accelerated tier: promoted from a side quest to the part that works.** It is
   the only tier currently discriminating at the top, so it gets more tasks
   rather than fewer: a Metal kernel (so the README's claim stops being half
