@@ -261,7 +261,7 @@ def test_a_calibrated_set_needs_a_calibration_block(tmp_path):
         load_task(path)
 
 
-def test_a_task_the_best_model_never_fails_cannot_enter_a_calibrated_set(tmp_path):
+def test_a_task_the_top_two_models_never_fail_cannot_enter_a_calibrated_set(tmp_path):
     # The rule that v1 did not have: a set the top of the field clears
     # completely has stopped measuring the top of the field.
     override = (
@@ -271,12 +271,56 @@ def test_a_task_the_best_model_never_fails_cannot_enter_a_calibrated_set(tmp_pat
         "    draws: 5\n"
         "    passed: 5\n"
         "    date: 2026-08-10\n"
+        "  - model: claude-sonnet-5\n"
+        "    draws: 10\n"
+        "    passed: 10\n"
+        "    date: 2026-08-10\n"
         "  - model: claude-haiku-4-5\n"
         "    draws: 5\n"
         "    passed: 1\n"
         "    date: 2026-08-10\n"
     )
-    with pytest.raises(TaskError, match="passed all 5 draws"):
+    with pytest.raises(TaskError, match="the top of the field cleared this task"):
+        load_task(make_task(tmp_path, meta_overrides=override))
+
+
+def test_the_strongest_model_alone_is_not_the_frontier(tmp_path):
+    # The half of the rule that changed on 2026-08-17 (docs/LESSONS.md L35).
+    # One model at the ceiling and the next one below it is the shape of a task
+    # that still discriminates, and reading only the best entry refused it.
+    override = (
+        "frozen_set: v2\n"
+        "calibration:\n"
+        "  - model: claude-opus-5\n"
+        "    draws: 15\n"
+        "    passed: 15\n"
+        "    date: 2026-08-09\n"
+        "  - model: claude-sonnet-5\n"
+        "    draws: 10\n"
+        "    passed: 8\n"
+        "    date: 2026-08-09\n"
+    )
+    task = load_task(make_task(tmp_path, meta_overrides=override))
+    assert task.frozen_set == "v2"
+
+
+def test_a_small_entry_can_neither_admit_a_task_nor_refuse_it(tmp_path):
+    # Three draws is not a measurement, so a 3/3 does not put the task at the
+    # ceiling — and it does not count toward the two entries the rule reads
+    # either, which is what makes this task refused rather than admitted.
+    override = (
+        "frozen_set: v2\n"
+        "calibration:\n"
+        "  - model: claude-opus-5\n"
+        "    draws: 3\n"
+        "    passed: 3\n"
+        "    date: 2026-08-10\n"
+        "  - model: claude-sonnet-5\n"
+        "    draws: 10\n"
+        "    passed: 4\n"
+        "    date: 2026-08-10\n"
+    )
+    with pytest.raises(TaskError, match="1 calibration entry with 5 draws or more"):
         load_task(make_task(tmp_path, meta_overrides=override))
 
 
@@ -289,7 +333,7 @@ def test_one_draw_is_not_a_calibration(tmp_path):
         "    passed: 0\n"
         "    date: 2026-08-10\n"
     )
-    with pytest.raises(TaskError, match="draws or more"):
+    with pytest.raises(TaskError, match="0 calibration entries with 5 draws or more"):
         load_task(make_task(tmp_path, meta_overrides=override))
 
 
