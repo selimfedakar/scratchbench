@@ -170,6 +170,14 @@ designing against unfamiliarity, now with a number attached.
 
 ## Accelerated tier, CUDA — 1 task, 24 hidden tests
 
+**`fused_rmsnorm_kernel` moved from `frozen_set: v1` to `v2` on 2026-08-17.** The
+rows below are unchanged and so are the files behind them: the move was made on
+these draws rather than on new ones, and the calibration block in the task's
+`meta.yaml` is re-derived from exactly these files by
+`tools/check_calibration.py`. What changed is which set the task belongs to, so
+`v1` is five laptop tasks with no accelerated member, and a `--set v1` sweep
+after that date is not comparable with a sweep before it.
+
 Verified on an **NVIDIA RTX 4000 Ada Generation**, torch 2.8.0+cu128,
 triton 3.4.0, Linux 6.8, Python 3.12. Reference 24 passed, untouched starter 24
 failed, six mutants out of six caught — the second distinct card this task has
