@@ -1,0 +1,62 @@
+{
+  "results_version": 2,
+  "harness_version": "0.1.0",
+  "model": "claude-sonnet-5",
+  "run_at": "2026-08-20T23:06:55+00:00",
+  "task_set": "unvalidated",
+  "headline_tier": "laptop",
+  "pass_rate": 1.0,
+  "measured": 1,
+  "not_measured": 0,
+  "pass_rate_by_category": {
+    "training": 1.0
+  },
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": 1.0,
+      "solved": 1,
+      "measured": 1,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "training": 1.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-sonnet-5-20260820T230315",
+    "index": 7,
+    "of": 10
+  },
+  "wall_clock_s": 35.01,
+  "usd_cost": 0.060057,
+  "tokens": {
+    "input": 1894,
+    "output": 3625,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "custom_autograd_double_backward",
+      "category": "training",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": true,
+      "status": "passed",
+      "duration_s": 1.78,
+      "counts": {
+        "passed": 116
+      },
+      "detail": ""
+    }
+  ]
+}
