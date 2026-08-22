@@ -1,0 +1,63 @@
+{
+  "results_version": 2,
+  "harness_version": "0.1.0",
+  "model": "claude-haiku-4-5",
+  "run_at": "2026-08-20T23:09:14+00:00",
+  "task_set": "unvalidated",
+  "headline_tier": "laptop",
+  "pass_rate": 0.0,
+  "measured": 1,
+  "not_measured": 0,
+  "pass_rate_by_category": {
+    "training": 0.0
+  },
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": 0.0,
+      "solved": 0,
+      "measured": 1,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "training": 0.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-haiku-4-5-20260820T230838",
+    "index": 5,
+    "of": 10
+  },
+  "wall_clock_s": 6.76,
+  "usd_cost": 0.005234,
+  "tokens": {
+    "input": 1399,
+    "output": 767,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "custom_autograd_double_backward",
+      "category": "training",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 1.45,
+      "counts": {
+        "failed": 17,
+        "passed": 99
+      },
+      "detail": ""
+    }
+  ]
+}
