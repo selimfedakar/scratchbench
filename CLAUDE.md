@@ -171,7 +171,7 @@ that the best model tried never fails is refused by the loader. See
 Every step of the build gets a short entry in `docs/sessions/NN-title.md`, in
 English, first person: what was done, why, which technology carries it, and
 what was verified with pasted output. Written as the step finishes, not
-retrospectively. 00 through 12 exist; the next one is 13.
+retrospectively. 00 through 13 exist; the next one is 14.
 
 `docs/LESSONS.md` is the other half and it is **mandatory, every session**:
 what I got wrong, in my own voice, newest first. Not a changelog — the entries
@@ -212,6 +212,55 @@ computed over. `accelerated` may set `requires_gpu: true` and must declare
 folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
+
+## State as of 2026-08-21, session 13 (verify before trusting)
+
+- **The headline question is decided and it is in `V2_DESIGN.md` §4b.** `v2` is
+  not published until it has at least three laptop tasks; the tier code does not
+  change; accelerated members are reported beside the headline with their
+  hardware named. Rejected: re-cutting the tiers into `portable | apple | cuda`
+  (it swaps "reproducible by anyone who clones this" for "by anyone with the
+  right laptop"), and headlining the whole set. **Reopens** if two independent
+  laptop tasks written against §2.0 are both swept by the top of the field.
+- **First attempt made, and refused.** `custom_autograd_double_backward`
+  (training, laptop, torch, **116 hidden tests**): a hand-written
+  `autograd.Function` whose backward must itself be differentiable. Ten draws
+  each — Opus **10/10**, Sonnet **10/10**, Haiku **0/10** — so the top two are at
+  the ceiling and it is `frozen_set: warmup`. **This is attempt one of the two.**
+- **Haiku failed the same seventeen tests of 116 in all ten draws**, and they are
+  two test functions: `test_gradgradcheck` and
+  `test_second_derivative_in_x_matches_autograd`. Nothing else ever failed. Ten
+  of ten saved the forward's sigmoid and reused it in the backward, where it is a
+  constant — that is mutant three in `tools/mutate_v2_tasks.py`, written before
+  any model was asked. Second time a model has reproduced one of this
+  repository's mutants verbatim.
+- **§2.0 is sharpened and the question is cheap: *does the framework have a page
+  about exactly this mistake?*** If yes the fact is knowledge and the top of the
+  field has it (double backward has a tutorial); if you only meet it by writing
+  the code and watching it fail, it is a hazard (`half` in MSL has no page). Only
+  hazards separate models that are all equally well read. **L37**, which also
+  records that L30 had already said this in my own words two sessions earlier.
+- **L36: a mechanism the framework does for free.** torch 2.8.0 sums a broadcast
+  gradient down to its input's shape itself, silently and bit-identically, so the
+  two "not reduced" mutants survive on purpose and `prompt.md` promises nothing
+  about it. Measured with a twenty-line probe, not assumed.
+  `tools/mutate_v2_tasks.py` now carries the two-way expected-verdict machinery
+  that `mutate_metal_task.py` had.
+- **`tools/check_cost.py` walked one directory of two.** 95 checked-in
+  `calibration/` files carried costs nothing re-derived. It now walks both:
+  **57 → 152 file(s) checked**, every one reproducing. No error found; a gap that
+  would have hidden one, closed (same argument as L11, L20).
+- Numbers from this session's runs: harness suite **105 passed**;
+  `validate --tier all` **13 task(s) validated, 1 not checked here**;
+  `mutate_v2_tasks.py --task custom_autograd_double_backward` **all 12 mutants
+  behaved as expected**; `check_calibration.py` **26 entries re-derived from 152
+  draw(s)**; `check_cost.py` **152 file(s) checked**. Fourteen tasks.
+  Set counts: `v1` five, `v2` three, `warmup` **six**.
+- Spend: **$1.3704** for thirty draws. Running total roughly $10.
+- **Still open.** `v2` is unchanged: three members, one laptop task, unpublished.
+  Next is `ROADMAP.md` §2 — the second Metal task, plus laptop candidate 2, and
+  candidate 2 must be checked against the sharpened §2.0 question **before** it
+  is written, not after it is calibrated.
 
 ## State as of 2026-08-17, session 12 (verify before trusting)
 
