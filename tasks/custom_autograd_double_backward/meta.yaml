@@ -1,0 +1,55 @@
+slug: custom_autograd_double_backward
+version: 1
+category: training
+difficulty: 4
+probes: >
+  Whether the model can write an autograd Function whose backward is itself
+  differentiable: the saved tensors read through the framework rather than
+  around it, the sigmoid recomputed inside the graph instead of carried across
+  from a forward that ran with differentiation switched off, a gradient returned
+  for each argument including the one that is a number, and nothing returned for
+  an input that did not ask.
+time_limit_s: 180
+tier: laptop
+requires_gpu: false
+deps: [torch]
+added: 2026-08-20
+# Written and verified on 2026-08-20: the reference passes 116 hidden tests, the
+# untouched starter fails all 116, and twelve mutants each came back with the
+# verdict it was written to get. Nine are caught. Three survive on purpose and
+# two of those three are the same fact: torch 2.8.0 sums a broadcast gradient
+# down to its input's shape itself, silently and bit-identically, so a backward
+# that skips the reduction is indistinguishable from one that does it. That was
+# measured rather than assumed, it is why prompt.md promises nothing about
+# reducing anything, and it is docs/LESSONS.md L36. The third survivor ignores
+# ctx.needs_input_grad and computes a gradient nobody asked for, which is waste
+# rather than error. tools/mutate_v2_tasks.py re-runs the pass on any laptop.
+#
+# Calibrated on 2026-08-21, ten draws per model, and refused from v2 by the
+# admission rule: claude-opus-5 and claude-sonnet-5 both cleared it, which is
+# the top two entries at the ceiling. It goes to warmup with its block, and it
+# is the first of the two attempts docs/V2_DESIGN.md §4b names as the condition
+# for reopening the headline decision.
+#
+# The refusal is not the interesting number. claude-haiku-4-5 failed all ten
+# draws and failed the *same seventeen tests* every time, out of 116:
+# test_gradgradcheck and test_second_derivative_in_x_matches_autograd, and
+# nothing else. Every other test passed in every draw. Ten out of ten saved the
+# forward's sigmoid and reused it in the backward, which is mutant three in
+# tools/mutate_v2_tasks.py, written before any model was asked. The task
+# measures exactly what it was built to measure; what it does not do is
+# separate the top of the field. docs/LESSONS.md L37.
+frozen_set: warmup
+calibration:
+  - model: claude-opus-5
+    draws: 10
+    passed: 10
+    date: 2026-08-21
+  - model: claude-sonnet-5
+    draws: 10
+    passed: 10
+    date: 2026-08-21
+  - model: claude-haiku-4-5
+    draws: 10
+    passed: 0
+    date: 2026-08-21
