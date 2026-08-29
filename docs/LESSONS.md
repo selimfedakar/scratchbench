@@ -13,6 +13,127 @@ Newest first.
 
 ---
 
+## L37 — "A fact about a tool" was never the criterion. "A fact with no tutorial" is.
+
+**What I expected.** L30 told me the laptop tier's reasoning tasks were
+saturated and that the one task separating frontier models was hard because of
+an obscure fact about a tool. So I wrote a laptop task whose entire difficulty
+is a tool contract: an `autograd.Function` whose backward has to be
+differentiable in turn. No derivation worth the name — the derivative of
+`w * x * sigmoid(alpha * x)` is undergraduate calculus — and four separate
+places to get the framework's contract wrong. I expected it to separate
+`claude-sonnet-5` from `claude-opus-5` the way the Metal task does.
+
+**What happened.** Ten draws each, $1.37:
+
+```
+claude-opus-5     10/10
+claude-sonnet-5   10/10
+claude-haiku-4-5   0/10
+```
+
+Refused from `v2` by the admission rule, and correctly.
+
+**Why, and this is the part I could have worked out in advance.** The fact I
+built on is *documented*. PyTorch has a page about double backward in custom
+Functions; `save_for_backward`, the version counter and `once_differentiable`
+are in the reference docs with the failure mode spelled out. A frontier model
+has read all of it.
+
+The Metal task's fact is not like that. `half` is a type name in Metal Shading
+Language, so it cannot be a variable — there is no tutorial about that, because
+it is not a topic. It is the kind of thing you learn by having the compiler
+reject your code. Two failures out of ten came from it, in a model that got the
+reduction right.
+
+So §2.0's clause is too generous and I wrote a task against the generous
+reading. The sharper version, and the one that is actually checkable before
+paying for a calibration: **does the framework have a page about exactly this
+mistake?** If yes, it is knowledge, and every model at the top has it. If the
+only way to meet the fact is to write the code and watch it fail, it is a
+hazard, and hazards are what separate models that are all equally well read.
+
+`activation_checkpointing_rng` lost for precisely this reason in session 10 and
+L30 says so in its own last paragraph. I had the lesson, quoted it while
+planning this task, and still could not apply it, because "obscure fact about a
+tool" is a phrase you can talk yourself into. The question above is not.
+
+**Where I nearly went wrong.** Haiku failing all ten draws looked, for a minute,
+like discrimination. It is discrimination one rung down, which is the definition
+of `warmup` and exactly what L35's rejected alternative would have readmitted.
+The rule refused the task without my having to argue myself out of anything,
+which is what an admission rule is for and is the strongest evidence yet that
+widening it in L35 did not soften it.
+
+**What changed.** §2.0 gains the question. The task goes to `warmup` with its
+block and its draws checked in — and it is the first of the two attempts §4b
+names as the condition for reopening the headline decision, so the next laptop
+task carries more weight than this one did.
+
+**What it cost.** $1.37, a session, and the uncomfortable observation that
+having the lesson written down in my own words two sessions earlier was not
+enough to stop me repeating it. What made the difference this time was not
+insight, it was that the rule is machinery: it refused the task on numbers while
+I was still admiring the failure shape.
+
+## L36 — A mechanism I built the task around, the framework does for free
+
+**What I expected.** The new laptop task hands its Function two tensors that
+broadcast against each other, so a gradient computed at the broadcast shape has
+to be summed back down to the shape of the input it belongs to. I wrote
+`_reduce_to` for it, wrote the tests over seven shape pairs broadcasting in both
+directions, and wrote two mutants that drop the reduction on each side. I
+expected both caught. Reducing a broadcast gradient is a thing people get wrong
+in custom Functions, and it was one of the three mechanisms I thought the task
+measured.
+
+**What happened.** Both mutants passed all 116 tests.
+
+```
+SURVIVED  weight gradient not reduced   116 passed in 0.93s
+SURVIVED  input gradient not reduced    116 passed in 0.93s
+```
+
+**Where I nearly went wrong.** My first reading was the same one L31 warns
+about: the tests have a hole in the broadcast coverage, add more shape pairs.
+The reflex is strong because it is *usually* right. What stopped it was that the
+mutation script prints the expected verdict beside the observed one, so a
+survivor arrives as a question, and the question has a cheap answer — twenty
+lines outside the repository, a Function that deliberately returns unreduced
+gradients:
+
+```
+torch 2.8.0
+x.grad shape (1, 5) expected (1, 5)
+warnings: []
+matches autograd: True True
+scalar-for-vector rejected: Function BadBackward returned an invalid gradient
+at index 0 - got [] but expected shape compatible with [3]
+```
+
+The engine sums it down itself. Silently, with no warning, bit-identically to
+doing it by hand. It rejects a shape that is not broadcast-compatible with the
+input and absorbs everything else. There is no test I can write that separates
+the two implementations, because there is no observable difference.
+
+**What changed.** Both mutants are checked in with `SURVIVES` as their expected
+verdict, which meant teaching `tools/mutate_v2_tasks.py` the two-way
+expectation that `mutate_metal_task.py` already had. The reference keeps
+`_reduce_to` — explicit is worth something, and it does not depend on the
+version of a library — but its docstring now says the reduction is explicit
+rather than necessary, with the measurement beside it.
+
+The part that cost nothing is the part worth noticing: **`prompt.md` had not
+been written yet**, so the promise I would have made about reducing gradients
+never entered it. That is the writing order (L28) paying for itself a second
+time, and by luck rather than by planning, because I ran the mutants before the
+prompt only out of habit.
+
+**What it cost.** Twenty lines and one run. What it would have cost is the
+version where I add four more shape pairs, watch them pass, ship a prompt
+promising a property nothing enforces (L8), and then describe the task in a
+journal as measuring three mechanisms when it measures two.
+
 ## L35 — I changed the admission rule after it refused a task I liked
 
 **What I expected.** The rule I wrote in section 4 of `V2_DESIGN.md` was meant
