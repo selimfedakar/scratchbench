@@ -29,8 +29,18 @@ import sys
 import tempfile
 from pathlib import Path
 
-# slug -> (module file, [(name, what it does wrong, old text, new text), ...])
-TASKS: dict[str, tuple[str, list[tuple[str, str, str, str]]]] = {
+# slug -> (module file, [mutant, ...]), where a mutant is either
+#
+#     (name, what it does wrong, old text, new text)                -> expected CAUGHT
+#     (name, what it does wrong, "SURVIVES", old text, new text)    -> expected to pass
+#
+# The second form exists because a survivor is sometimes a fact about the task
+# rather than a hole in it, and the honest way to hold that is an expectation
+# checked in both directions: this script fails if a mutant marked SURVIVES is
+# caught, exactly as it fails when one expected to be caught is not.
+# `tools/mutate_metal_task.py` carries three of them and `docs/LESSONS.md` L31
+# through L33 is one entry per survivor.
+TASKS: dict[str, tuple[str, list[tuple[str, ...]]]] = {
     "speculative_decoding_verify": (
         "speculative_decoding.py",
         [
@@ -227,6 +237,91 @@ TASKS: dict[str, tuple[str, list[tuple[str, str, str, str]]]] = {
             ),
         ],
     ),
+    "custom_autograd_double_backward": (
+        "scaled_swish.py",
+        [
+            (
+                "saved tensors detached",
+                "reads the saved input with its graph cut, which costs nothing at first order",
+                "        x, w = ctx.saved_tensors",
+                "        x, w = (saved.detach() for saved in ctx.saved_tensors)",
+            ),
+            (
+                "backward declared once differentiable",
+                "the decorator that makes the second derivative an error instead of a wrong number",
+                """    @staticmethod
+    def backward(ctx, grad_output):""",
+                """    @staticmethod
+    @torch.autograd.function.once_differentiable
+    def backward(ctx, grad_output):""",
+            ),
+            (
+                "sigmoid treated as a constant",
+                "what saving the forward's sigmoid and reusing it amounts to, in one line",
+                "        s = torch.sigmoid(alpha * x)",
+                "        s = torch.sigmoid(alpha * x).detach()",
+            ),
+            (
+                "saves a copy rather than the input",
+                "keeps its own tensor, so nothing notices when the caller's is modified in place",
+                "        ctx.save_for_backward(x, w)",
+                "        ctx.save_for_backward(x.clone(), w)",
+            ),
+            (
+                "weight gradient not reduced",
+                "returns the broadcast gradient; the engine sums it back to the weight's shape itself",
+                "SURVIVES",
+                "            grad_w = _reduce_to(grad_output * swish, w.shape)",
+                "            grad_w = grad_output * swish",
+            ),
+            (
+                "input gradient not reduced",
+                "the same omission on the other side, absorbed the same way",
+                "SURVIVES",
+                "            grad_x = _reduce_to(grad_output * w * d_swish, x.shape)",
+                "            grad_x = grad_output * w * d_swish",
+            ),
+            (
+                "derivative of the gate only",
+                "differentiates sigmoid(alpha x) and forgets that x multiplies it",
+                "            d_swish = s + alpha * x * s * (1 - s)",
+                "            d_swish = s",
+            ),
+            (
+                "alpha dropped from the derivative",
+                "chain rule applied without the inner constant, correct only at alpha one",
+                "            d_swish = s + alpha * x * s * (1 - s)",
+                "            d_swish = s + x * s * (1 - s)",
+            ),
+            (
+                "needs_input_grad ignored",
+                "computes the input gradient whether or not anything asked for it",
+                "SURVIVES",
+                """        grad_x = grad_w = None
+        if ctx.needs_input_grad[0]:""",
+                """        grad_x = grad_w = None
+        if True:""",
+            ),
+            (
+                "one gradient short",
+                "returns as many gradients as there are tensors rather than as many as there are arguments",
+                "        return grad_x, grad_w, None",
+                "        return grad_x, grad_w",
+            ),
+            (
+                "a gradient for the scalar",
+                "returns a number in the slot that took a Python float",
+                "        return grad_x, grad_w, None",
+                "        return grad_x, grad_w, grad_output.sum()",
+            ),
+            (
+                "the expression instead of the Function",
+                "skips the class entirely and lets the framework differentiate the formula",
+                "    return ScaledSwish.apply(x, w, alpha)",
+                "    return w * x * torch.sigmoid(alpha * x)",
+            ),
+        ],
+    ),
 }
 
 
@@ -265,6 +360,15 @@ def run_tests(source: str, task_dir: Path, module: str) -> tuple[int, str]:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+def unpack(mutant: tuple[str, ...]) -> tuple[str, str, str, str, str]:
+    """Both mutant shapes, normalised. A four-field mutant expects CAUGHT."""
+    if len(mutant) == 5:
+        name, description, expected, old, new = mutant
+        return name, description, expected, old, new
+    name, description, old, new = mutant
+    return name, description, "CAUGHT", old, new
+
+
 def last_line(output: str) -> str:
     lines = [line for line in output.splitlines() if line.strip()]
     return lines[-1] if lines else "(no output)"
@@ -293,23 +397,26 @@ def check(repo: Path, slug: str) -> int:
         return 1
 
     print("--- mutants ---")
-    survivors = 0
-    for name, description, old, new in mutants:
+    wrong = 0
+    for mutant in mutants:
+        name, description, expected, old, new = unpack(mutant)
         if old not in reference:
             print(f"SKIPPED   {name}: the reference no longer contains the patched text")
-            survivors += 1
+            wrong += 1
             continue
         code, output = run_tests(reference.replace(old, new, 1), task_dir, module)
         verdict = "SURVIVED" if code == 0 else "CAUGHT  "
-        survivors += int(code == 0)
-        print(f"{verdict}  {name} ({description})")
+        agrees = verdict.startswith(expected[:6])
+        wrong += int(not agrees)
+        note = "" if agrees else f"  <-- expected {expected}"
+        print(f"{verdict}  {name} ({description}){note}")
         print(f"          {last_line(output)}")
 
     print()
-    if survivors:
-        print(f"{slug}: {survivors} mutant(s) survived — the task has a hole in it")
+    if wrong:
+        print(f"{slug}: {wrong} mutant(s) did not match their expected verdict")
         return 1
-    print(f"{slug}: all {len(mutants)} mutants caught")
+    print(f"{slug}: all {len(mutants)} mutants behaved as expected")
     return 0
 
 
