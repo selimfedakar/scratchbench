@@ -107,6 +107,22 @@ and lost, because bracketing an RNG around a recomputation is documented in ever
 framework that implements checkpointing. See `LESSONS.md` L30, including what
 this implies about designing against a moving target.
 
+**Sharpened 2026-08-21, after the clause above cost another task.**
+"An obscure fact about a tool" is a phrase that can be talked into covering
+almost anything, and it covered `custom_autograd_double_backward`, which
+`claude-opus-5` and `claude-sonnet-5` both passed ten draws out of ten. The
+operational question, answerable before paying for a calibration, is:
+
+> **Does the framework have a page about exactly this mistake?**
+
+If it does, the fact is knowledge, and every model at the top of the field has
+read it. Double backward in custom autograd Functions has a tutorial;
+`save_for_backward` and the version counter have reference docs with the failure
+spelled out. `half` being a type name in Metal Shading Language has no page,
+because it is not a topic — it is something a compiler tells you after you have
+already written it wrong. The first is knowledge and the second is a hazard, and
+only hazards separate models that are all equally well read. `LESSONS.md` L37.
+
 Mechanism density alone is not sufficient either — `online_softmax_attention` is
 difficulty 5, mechanism dense, and Opus 5 passed it first try. Four further
 properties separate frontier models where a single hard mechanism does not:
@@ -310,6 +326,44 @@ L21 with extra steps. Separating a small
 model from a large one is the definition of `warmup`. The frontier is the top of
 the field, and the top of the field is where a headline set has to bite.
 
+## 4b. What the headline is, decided 2026-08-20
+
+Once `flash_attention_backward` and `fused_rmsnorm_kernel` joined `v2`, the set
+had three members and **one of them was on the laptop tier**. The leaderboard's
+headline rate is the laptop tier by construction (`HEADLINE_TIER` in
+`runner/report.py`, and section 1's whole argument), so publishing `v2` in that
+shape would have published a headline computed over a single task.
+
+Three ways out were considered and the choice is recorded here because the
+rejected two are the ones that will look attractive again in three months.
+
+**Chosen: keep the tiers, grow the laptop half.** `v2` is not published until it
+has at least three laptop tasks. Nothing in `runner/` changes; the accelerated
+members are reported beside the headline exactly as they are today, with the
+hardware each one needs named. The cost is the hardest kind of work in this
+repository — laptop tasks that clear the admission rule, against a criterion
+(§2.0) that three tasks have already failed.
+
+**Rejected: re-cut the tiers** into something like `portable | apple | cuda`, and
+let the headline span the first two on the grounds that a Mac is a laptop. It
+costs no new tasks and it would have given `v2` a three-member headline the same
+afternoon. It also quietly replaces "reproducible by anyone who clones this" with
+"reproducible by anyone who owns the right laptop", while the README goes on
+saying the first thing. The fastest way to make an inventory look like a set is
+to redefine what a set is, and that is L21 in a new costume.
+
+**Rejected: headline the whole set** with the tier breakdown underneath. Honest,
+immediately available, and it gives up the single property that distinguishes
+this from every GPU-gated benchmark: a headline number a reader can re-derive on
+the machine they already have.
+
+**What would reopen it.** Two independent attempts at a discriminating laptop
+task, both written against §2.0 and both cleared by the top of the field. At
+that point the laptop tier's saturation is a measurement rather than a
+suspicion, and re-cutting the tiers stops being a shortcut and becomes the
+honest description of what this benchmark measures. Write that up in
+`LESSONS.md` before changing a line of `runner/`.
+
 ## 5. What v2 is made of
 
 - **Carried over from v1:** `kv_cache_equivalence`, `grad_accumulation`,
@@ -341,6 +395,14 @@ the field, and the top of the field is where a headline set has to bite.
   The five remaining candidates are all reasoning tasks of the same kind, so
   writing them against the same criterion has a known answer. Anything new on
   the laptop tier has to clear 2.0 first or it is a fourth warm-up task.
+
+- **It was a fourth warm-up task. 2026-08-21.**
+  `custom_autograd_double_backward` was written against §2.0 rather than against
+  the reasoning properties, and refused: Opus 10 of 10 and Sonnet 10 of 10, with
+  Haiku at 0 of 10 failing the same seventeen tests of 116 in every draw. It is
+  the first of the two attempts §4b names as the condition for reopening the
+  headline decision, and it is what sharpened §2.0 into a question that can be
+  answered before a calibration is paid for.
 - **`fused_rmsnorm_kernel` moved from `v1` into `v2` on 2026-08-17**, on the
   five-draw sweep of 2026-08-09 that was already published: `claude-opus-5` 1 of
   5, `claude-haiku-4-5` 3 of 5. It is the lowest frontier pass rate in the
