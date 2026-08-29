@@ -186,6 +186,7 @@ See [`TASK_FORMAT.md`](TASK_FORMAT.md) for the full contract, and [`CONTRIBUTING
 | `sharded_dataloader` | warmup | data | 4 | 53 | stride not slab, disjoint ranks, resumable mid-epoch |
 | `quantization_error_bounds` | warmup | numerics | 4 | 65 | per-channel scales, clipping, the error you promised |
 | `online_softmax_attention` | v1 | attention | 5 | 57 | tiled attention with a running max and rescale |
+| `custom_autograd_double_backward` | warmup | training | 4 | 116 | a hand-written backward that is itself differentiable |
 | `flash_attention_backward` | v2 | attention | 5 | 49 | a derived backward, and the row term that is not blockwise |
 | `fused_rmsnorm_kernel` ⚡ | v2 | kernels | 4 | 24 | a real Triton reduction, not a PyTorch one-liner |
 | `metal_cross_entropy_kernel` ⚡ | v2 | kernels | 4 | 68 | a Metal threadgroup reduction at a group size it does not choose |
@@ -233,6 +234,14 @@ And Opus 5 passed all three, forty draws out of forty. The other two did not, an
 | `claude-haiku-4-5` | 16 of 19 | the row correction, or the `1/sqrt(d)` scale |
 
 Sonnet's `2 failed, 47 passed` is the signature of a mutant written for this task weeks before Sonnet was asked anything — *queries not put at the end of the key range*. A real model reproduced one of the invented wrong implementations, exactly, twice.
+
+### The fourth task, and what it taught the criterion
+
+`custom_autograd_double_backward` (2026-08-21, 116 tests) is a hand-written `autograd.Function` whose backward has to be differentiable in turn. Opus 10/10, Sonnet 10/10, Haiku **0/10** — refused, `warmup`.
+
+The refusal is not the interesting part. Haiku failed the *same seventeen tests of 116 in every one of ten draws*, and they are two test functions: the second-derivative ones. Everything else passed every time — forward, first-order gradients, broadcasting, return arity, the in-place detection. Ten draws out of ten saved the forward's sigmoid and reused it in the backward, where it arrives as a constant because a `Function`'s forward runs with differentiation switched off. That substitution is mutant three for this task, written before any model was asked; this is the second time a real model has reproduced one of them verbatim.
+
+And it sharpened the design rule. "The difficulty is an obscure fact about a tool" was too generous a sentence: PyTorch has a page about double backward in custom Functions, so every model at the top has read it. `half` being a type name in Metal Shading Language has no page, because it is not a topic — you learn it from a compiler. The question is now written down as *does the framework have a page about exactly this mistake?*, and it is answerable before spending anything on a calibration. `docs/LESSONS.md` L37.
 
 ### The first task the rule let in on its own numbers
 
