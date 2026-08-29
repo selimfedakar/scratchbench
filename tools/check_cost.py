@@ -71,9 +71,19 @@ def check(path: Path) -> tuple[str, str]:
 def main(argv: list[str]) -> int:
     paths = [Path(argument) for argument in argv]
     if not paths:
-        paths = sorted((REPO_ROOT / "leaderboard").glob("*.json"))
+        # Both directories, for the reason `check_calibration.py` walks both:
+        # every results file checked into this repository is evidence somebody
+        # can be asked to re-derive, and a checker that covers one of the two
+        # places they live is the second-list mistake (L11, L20) waiting to
+        # happen. `calibration/` files carry costs too, and 95 of them were
+        # sitting outside this check until 2026-08-21.
+        paths = sorted(
+            path
+            for directory in ("leaderboard", "calibration")
+            for path in (REPO_ROOT / directory).glob("*.json")
+        )
     if not paths:
-        print("no results files given and none in leaderboard/")
+        print("no results files given and none in leaderboard/ or calibration/")
         return 2
 
     bad = 0
