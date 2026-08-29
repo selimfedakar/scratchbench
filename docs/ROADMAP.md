@@ -149,6 +149,19 @@ Write it in the mandated order — `reference/` → `hidden_tests/` → `prompt.
 `tools/mutate_v2_tasks.py` beside the existing ones, each with its expected
 verdict.
 
+**Candidate 1 was written on 2026-08-20 and refused on 2026-08-21** as
+`custom_autograd_double_backward`: Opus 10/10, Sonnet 10/10, Haiku 0/10, so it
+is `warmup` and it is **attempt one of the two** that reopen §1.2. Before
+writing candidate 2, apply the question §2.0 gained from it — *does the
+framework have a page about exactly this mistake?* — because candidates 2 and 3
+below have not been checked against it and at least one of them may not
+survive the check. Candidates 2, 3 and 4 stay on this list and
+are the standing task bank: the next session that needs a laptop task takes the
+top one rather than inventing a fresh idea, and a candidate is only struck off
+this list when it has been written or when a measurement kills it. Each was
+chosen for the fact it turns on, and those facts do not go stale just because a
+different task got written first.
+
 ### 1.4 Calibrate it
 
 ```bash
