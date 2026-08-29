@@ -15,6 +15,49 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 
 ## Pending
 
+### Session 13 — a laptop task, refused, and what it taught
+
+Two runs, because the push cadence changed in the middle of the session.
+
+**Part one, already pushed:** the thirty calibration draws behind the new task's
+block, 30 commits and one push. They land first because `meta.yaml` carries a
+calibration block and `tools/check_calibration.py` re-derives it from those
+files in CI.
+
+**Part two, the rest:**
+
+```bash
+bash ~/scratchbench-session13-rest.sh
+```
+
+14 commits, **one push at the end**, no sleeps. That is the standing cadence
+now: one file per commit, every commit landing separately so each one is its own
+contribution, and a single push because a CI run per commit was never what the
+gaps were buying. Nothing here is squashed.
+
+| # | File | What |
+|---:|---|---|
+| 1 | `tasks/…/reference/scaled_swish.py` | the reference backward, differentiable in turn |
+| 2 | `tasks/…/hidden_tests/test_scaled_swish.py` | 116 tests, the second-order ones are the point |
+| 3 | `tasks/…/starter/scaled_swish.py` | the skeleton |
+| 4 | `tasks/…/prompt.md` | written last, on purpose |
+| 5 | `tasks/…/meta.yaml` | refused from v2, warmup with its block |
+| 6 | `tools/mutate_v2_tasks.py` | twelve mutants, three expected to survive |
+| 7 | `tools/check_cost.py` | it walked one directory of the two costs live in |
+| 8 | `README.md` | the fourth task and the sharpened question |
+| 9 | `docs/V2_DESIGN.md` | §4b the headline decision, §2.0 sharpened |
+| 10 | `docs/LESSONS.md` | L36, L37 |
+| 11 | `docs/ROADMAP.md` | candidate one spent, three left in the bank |
+| 12 | `docs/sessions/13-…md` | journal 13 |
+| 13 | `CLAUDE.md` | state |
+| 14 | `COMMITS.md` | this |
+
+The task's five files used to need a push of their own for a different reason,
+and it is worth keeping in mind for any future queue that pushes more than once:
+`meta.yaml` without `hidden_tests/` beside it is a task the loader refuses, so a
+tip inside that group is red on a commit that is not wrong. A single push at the
+end makes the question moot.
+
 ### Session 12 — the admission rule reads the top two
 
 Sixteen commits, fifteen pushes, sixty seconds between them. The runnable form
