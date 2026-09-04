@@ -13,7 +13,112 @@ Newest first.
 
 ---
 
+## L42 — It was never the task. Every other process on this machine is stalled.
+
+**What I expected.** L41 left seven suspects dead and no cause, and every one of
+those seven was something inside `metal_softmax_backward_kernel`: its shapes,
+its sentinel, its expected values, its kernel, the size of what it compares. The
+control that justified looking there was two measurements — the task's reference
+ran 1.2-3.7 s every time, and the published Metal task's starter ran under 1.4 s
+ten times out of ten — so I expected to find the cause inside the suite, and I
+started by cutting the suite in half.
+
+**What happened.** The first cut was not a half of the suite, it was the one
+factor the seven measurements had all held fixed: *the starter fails all 81
+tests*. Every variant in L41 changed the task and kept the failures, so "empty
+kernel" and "81 failing assertions" had never been told apart. Four cells, same
+sandbox assembly, same environment:
+
+| Cell | Kernel | Tests | Result |
+|---|---|---|---|
+| A | starter | 81 fail | 2.62 s, 2.10 s, 2.09 s |
+| B | reference | 81 pass | killed at 100 s, 120 s, 120 s |
+| C | reference, tolerance 0 | 73 fail | 2.05 s, 2.17 s, 1.93 s |
+| D | starter, assertions removed | 81 pass | 97.58 s, killed at 120 s, 120 s |
+
+Three rounds, interleaved, and it looked decisive in the wrong direction: the
+*reference* was slow every time, which contradicts L41's own control outright,
+and the split fell exactly on whether the tests passed. Two more cells agreed —
+the passing suite with every MPS tensor deliberately kept alive ran 2.46 s and
+1.72 s, and the failing suite with `gc.collect()` and `empty_cache()` after each
+test was killed at 90 s twice. A tidy mechanism, both directions confirmed.
+
+It was wrong. Running the identical command six times in a row:
+
+```
+release #1  0.00s   release #2  43s   release #3  0.00s
+release #4  46s     release #5  0.00s release #6  37s
+```
+
+Same flag, same file, same everything. Then with the flags reversed, and the
+slow one was still whichever ran second. **The pass/fail split was the ordering,
+and every cell table above is a picture of alternation, not of a mechanism.**
+
+What is actually true, measured over fourteen consecutive launches of one
+script:
+
+```
+launch  probe_ms  workload_s
+     1      0.56       0.086
+     2    776.01      10.201
+     3      0.50       0.071
+     4    420.51       8.500
+     ...   alternating, 7 pairs, no overlap
+```
+
+Every other process that touches `torch.mps` is stalled for its whole life, and
+in a stalled process a host-to-device-to-host round trip costs hundreds of
+milliseconds instead of half of one. `tools/check_mps_stall.py` re-derives it.
+
+**What I ruled out, each by a measurement rather than by argument.**
+
+| Suspect | How it died |
+|---|---|
+| The task | `metal_cross_entropy_kernel`, already published, stalls the same way: its reference measured 1.89 s, 48.76 s, 1.50 s |
+| The custom shader | A loop of plain `torch.softmax` with no `compile_shader` anywhere stalls too |
+| Pass versus fail, and tensor retention | Both reproduced by running one unchanged command twice |
+| The GPU being busy | While a suite sat stalled for 75 s, a second process launched *into* that window did 50 MPS softmaxes in 0.687 s |
+| A driver reset | `AGXAccelerator` `recoveryCount` is 0 throughout |
+| The previous process still tearing down | A ten second gap between launches changes nothing |
+| The last Metal client exiting | A keeper process holding an MPS context open the whole time changes nothing except the phase |
+| CPU starvation | 2599 samples of a stalled process, all of them in `-[_MTLCommandBuffer waitUntilCompleted]` under `__psynch_cvwait` |
+
+**Where I went wrong, and it is not L41's seven measurements.** Those were good.
+The error is one level up: L41 fixed the frame. It asked "what about this task
+makes it slow", and every experiment after that inherited the assumption in the
+question. The control that licensed the frame — "the reference is fast, the
+other Metal task is fast" — was two samples of a fair coin, read as a constant.
+L40 already says a cause that explains one observation is not the cause. This is
+its neighbour: **a control that has not been repeated is not a control.** Both
+of L41's controls were single-digit samples of something that alternates.
+
+And the near miss is worth keeping. Cells A through F produced a clean, falsifiable,
+both-directions-confirmed mechanism — retention keeps buffers out of the
+allocator — that was pure artefact. It survived six rounds of interleaving
+because interleaving defends against drift, not against alternation. The cheap
+check that would have killed it in ninety seconds is the one that eventually
+did: **run the same cell twice in a row before believing any difference between
+two cells.**
+
+**What changed.** `tools/check_mps_stall.py`, which both measures the population
+and exposes `probe()` and `is_stalled()` so a graded run can refuse to grade in
+that state. `ROADMAP.md` section 9 item 3 is rewritten around the real fault and
+section 9.2 carries the choice it forces. L41 keeps its seven measurements and
+gains a header saying its frame was wrong, because deleting it would delete the
+evidence for this entry.
+
+**What it cost.** Session 14's second half and most of session 15, to arrive at a
+fault that had nothing to do with either task — and a published task,
+`metal_cross_entropy_kernel`, whose calibration draws were taken on this machine
+and are now known to have been exposed to it.
+
 ## L41 — Half the runs are a hundred times slower and I cannot say why
+
+⚠ **Read L42 first.** The seven measurements below stand and the conclusion
+above them does not: the stall is not this task's, and the control quoted in
+this entry — "the reference measured 1.2-3.7 s every time" — does not survive
+repetition. What follows is kept because L42's evidence is built on it.
+
 
 **What I expected.** The new Metal task validated cleanly the first time: 81
 tests passed against the reference, 81 failed against the untouched starter, and
