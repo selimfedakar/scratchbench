@@ -152,6 +152,73 @@ the exposure documented — and recommends the guard, because it is the only one
 of the three that makes a recorded `timeout` mean what the leaderboard says it
 means.
 
+## The guard, chosen and built the same day
+
+Selim picked option A, so the session did not end at the diagnosis.
+
+The constraint that shaped the design is that the stall is a property of a
+*process*, decided before it does anything. So a probe run from the harness says
+nothing about the child the harness is about to grade in — it has to be the
+child that asks. `runner/mps_stall.py` therefore holds both halves: `probe()`,
+which is the measurement, and `pytest_configure`, which is a pytest plugin hook.
+`runner/sandbox.py` copies that module into a Metal task's workdir at the same
+moment it copies the hidden tests, which is after the solver has finished
+writing, and runs pytest with `-p _scratchbench_mps_stall`. A file that is not
+on disk while the solver works cannot be subverted by it; that guarantee was
+already paid for, and this reuses it rather than inventing a second one.
+
+Three details are the ones worth defending:
+
+- **The gate exits, it does not fail.** A stalled process has measured nothing
+  about the solution. Failing its tests would turn an absence of evidence into a
+  verdict, which is the one thing this repository cannot do. It exits `125` —
+  outside pytest's own `0`-`5`, and distinct from the `124` that
+  `tools/mutate_metal_task.py` already uses for a timeout, so a caller never has
+  to guess which of the two it is holding.
+- **Retry, then a status of its own.** `run_pytest_until_healthy` relaunches up
+  to four times. Launches alternate almost perfectly, so two would usually do;
+  four leaves room for the day that stops being true and still bounds the cost
+  at a few seconds, because the gate fires before the first test. A run where
+  every attempt stalls becomes **`mps_stalled`**, classified in `STATUSES` as no
+  evidence and a harness failure. That status exists so that the alternative
+  does not: without it a stalled run is a `timeout`, which is evidence *and* a
+  failure, and the failure shape this repository publishes would be describing
+  the machine.
+- **It is armed only for Metal tasks.** The stall is a measured property of this
+  Mac. Nothing has been measured on the rented CUDA box, and arming the guard
+  there would be an assumption wearing a measurement's clothes.
+
+Evidence, all of it from this session:
+
+```
+validate --tier all                                x3, clean
+validate --tasks metal_softmax_backward_kernel     x6, clean
+  81 passed  81 failed   7.60s · 3.27s · 11.90s · 9.37s · 9.05s · 14.35s
+python -m pytest -q                                110 passed in 87.76s
+tools/check_cost.py                                152 file(s) checked
+tools/check_calibration.py                         26 entries, 152 draw(s)
+```
+
+That is the same task that returned `BROKEN` intermittently last session and
+once took 2920 s. Six consecutive runs, longest 14.35 s. The harness suite gained
+five tests and lost more than half its wall time, because it grades the Metal
+tasks too and had been paying the stall all along without anyone noticing.
+
+## What this does not do
+
+It does not explain the stall. Nothing here says why every other process on this
+machine is blocked; the guard detects the state and refuses to grade in it, and
+`LESSONS.md` L42 says as much in the entry rather than in a commit message.
+
+It also does not clear the backlog the diagnosis created.
+`metal_softmax_backward_kernel` still has no calibration block, so it is still
+`unvalidated` and still belongs to no set — but its trigger is now met and the
+thirty draws are the next thing to spend money on. `metal_cross_entropy_kernel`
+is published on draws taken before the guard existed. And §5's `v2` sweep, which
+was blocked on the stall, turns out to be blocked on four other things as well;
+§5 now carries a table saying which, because "one session away" was never true
+and saying so in the roadmap is cheaper than discovering it mid-sweep.
+
 ## What I would tell myself at the start of session 14
 
 L40's rule was that a cause explaining one observation is not the cause. This
