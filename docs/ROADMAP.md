@@ -162,6 +162,38 @@ this list when it has been written or when a measurement kills it. Each was
 chosen for the fact it turns on, and those facts do not go stale just because a
 different task got written first.
 
+#### The gate was applied on 2026-08-29, and all three failed it
+
+The question costs nothing to answer, so it was answered before anything was
+written, against the installed libraries rather than from memory. Every quote
+below is from the docstring of the function the candidate turns on, on this
+machine, numpy 1.23.5.
+
+| Candidate | The fact it turns on | Does the framework have a page about exactly this mistake? |
+|---|---|---|
+| `byte_level_bpe_roundtrip` | the byte-to-printable-codepoint table, and what a decoder does with bytes that are not valid UTF-8 | **Yes, and worse: it ships as code.** The table is a twenty-line function published in OpenAI's GPT-2 release and copied verbatim into every byte-level BPE implementation since. `tiktoken` 0.13.0 and `tokenizers` 0.23.1 are installed on this machine. A task about it measures recall of a specific published function. |
+| `pairwise_sum_error_bound` | `numpy.sum` is pairwise and a Python loop is not | **Yes, in `np.sum`'s own Notes:** "the numerical precision of sum (and `np.add.reduce`) is in general limited by directly adding each number individually to the result causing rounding errors in every step. However, often numpy will use a numerically better approach (partial pairwise summation)". |
+| `strided_view_aliasing` | the view aliases its input and is not writeable by default | **Yes, twice.** `sliding_window_view`: "The default is false, as this should be used with caution: the returned view contains the same memory location multiple times, so writing to one location will cause others to change." `as_strided` carries a `.. warning::` reading "This function has to be used with extreme care, see notes", and the Notes explain that vectorised writes to such arrays are unpredictable. |
+
+**The structural reason, which is the part worth keeping.** The gate selects for
+a tool whose manual is thin: `half` is a type name in Metal Shading Language and
+there is no page about not using it as a variable, because MSL's documentation is
+a language specification rather than a tutorial ecosystem. The laptop tier's
+entire toolset is numpy and torch, which are two of the most exhaustively
+documented libraries in existence and whose docstrings *are* the pages. Every
+fact nameable in them is documented somewhere in them. That is not a proof that
+no laptop candidate can pass the gate, and it must not be treated as one — see
+§2.3, where the reopening condition is deliberately a measurement and not an
+argument — but it is the reason three consecutive candidates failed.
+
+**Consequence for §2.3, and it is a logical one rather than a budget one.**
+§1.2's reopening condition is two independent attempts *written against §2.0*.
+A candidate that fails §2.0's own gate before it is written is not an attempt
+against §2.0, so calibrating one would not advance the branch: it would buy a
+fifth `warmup` task and leave the count of qualifying attempts at one. Spending
+the thirty draws is therefore not the cheap way to make progress here; finding a
+candidate that passes the gate is.
+
 ### 1.4 Calibrate it
 
 ```bash
@@ -232,6 +264,15 @@ what made L31 through L33 findings instead of guesses.
 
 The next name off the section 1.3 list. Same order, same gates, same
 calibration protocol.
+
+**Not written on 2026-08-29, and the reason is a result rather than a stall.**
+The §2.0 gate was applied to all three remaining bank entries first, because it
+is free, and all three failed it with the evidence recorded in §1.3. Writing any
+of them would produce a `warmup` task that does not count toward §1.2's
+reopening condition, which is the one thing this candidate was supposed to buy.
+So the open item is not "write the next task", it is **"find a laptop candidate
+that passes the gate"**, and that is a design question with a decision attached
+to it. It is item 1 of the debt ledger in section 9.
 
 ### 2.3 The branch
 
@@ -550,3 +591,71 @@ and 18 finds things, so do not schedule them on the same day.
 Estimated model spend from here to launch: **$25 to $50**, plus a few dollars of
 GPU rental. The founding constraint is unchanged and that number is the point of
 it.
+
+---
+
+## 9. Debt ledger
+
+Things found while working a section, not fixed there, and too small or too
+sideways to be a section of their own. Each carries where it belongs, so it is
+scheduled rather than remembered. Add to it whenever a session walks past
+something; delete an entry only when it is done or when it is decided against in
+writing.
+
+| # | Found | What | Where it belongs | Cost |
+|---|---|---|---|---|
+| 1 | 2026-08-29, §2.2 | **No laptop candidate passes the §2.0 gate**, and §9.1 below argues the gate may be the wrong instrument for this tier. The bank is exhausted (§1.3) and the replacement is a design question, not a writing task. Until it is answered, §1.2's reopening condition cannot advance and §5's `v2` sweep cannot start. This is the critical path. | §9.1, then a session of its own before §5 | $0 to decide, $3 to calibrate what it produces |
+| 2 | 2026-08-29, §2.1 | **`docs/PATTERNS.md` does not exist.** `CLAUDE.md`'s mandatory loading paragraph says to search it first for any bug. A rule pointing at a missing file trains the next session to skip the rule. Either write the file out of the L-entries that are really debugging patterns, or cut the clause. | §6.3, the claims audit | $0 |
+| 3 | 2026-08-30, §2.1 | 🔴 **`metal_softmax_backward_kernel` is finished and cannot be published**, because about half its failing runs are a hundred times slower for the life of the process. The untouched starter, same command, same idle machine: **1.0 s, 1.4 s, 33 s, 124 s, 278 s, 312 s, 344 s, 2920 s**. The reference is 1.2–3.7 s every time and the forward Metal task's starter is under 1.4 s ten times out of ten, so it is this task and not the machine. Seven suspects killed by measurement (`LESSONS.md` L41): status-line CPU starvation, the largest shapes, autograd in the expected value, memory (the slow run used *less*), the NaN sentinel, a kernel that writes nothing, the size of the compared tensors. **Consequence:** `time_limit_s` is 300 s, so a wrong solution can be recorded `timeout` rather than `failed` — the rate survives that, the failure shape does not, and the failure shape is what this repository publishes instead of partial credit. The task therefore ships `frozen_set: unvalidated` and uncalibrated. **Next step is not more theorising:** bisect the suite by halves against the forward task's structure until the smallest reproducer is found, or instrument one slow run with `MTL_DEBUG_LAYER` / Metal system trace. | Before §5's `v2` sweep — a sweep is the thing it would corrupt | $0 to diagnose, $2 to calibrate once it is fixed |
+| 3b | 2026-08-30, §2.1 | **Fixed on the way past, keep the reasoning.** `mutate_metal_task.py` waited 1800 s per mutant, and the mutant that returns out-of-range lanes before a barrier — undefined behaviour in MSL — spent every second of it. It now reads the task's own `time_limit_s` from `meta.yaml` and calls a timeout `CAUGHT`, which is what `STATUSES` does. Separately its starter gate read a timeout as "fails cleanly", so a starter that never answered would have certified the tests; One consequence to keep in view: a mutant that is expected to SURVIVE and happens to be killed by the limit is reported CAUGHT, so while item 3 is open a `did not match` on a SURVIVES line has two possible readings and the printed `timed out after 300s` is what tells them apart. `TIMED_OUT = 124` is now distinct from a real failure and stops the run with its own message. | done | $0 |
+| 4 | 2026-08-29, §2.1 | **L32's title is one notch more general than its evidence.** "The race this hardware refuses to show me" reads as a fact about the device; the backward kernel shows the same race at its second scratch reuse, so the fact is about the distance between the read and the write instead. The entry's body already scoped itself to "on this machine, on this driver, today" and predicted the failure would be news, so this is a title and a cross-reference to L39, not a retraction. `leaderboard/README.md` does not publish the claim and needs no change. | §6.3, the claims audit | $0 |
+| 5 | 2026-09-02, §2.1 | 🟡 **The thirty draws for `metal_softmax_backward_kernel` are owed.** Decided by Selim on 2026-09-02: fix item 3 first, then calibrate — because a leaderboard reader who sees `timeout` concludes the task is broken, and would be right. **Trigger:** item 3 closed, i.e. twenty consecutive runs of the untouched starter all under 5 s. **Then:** `--repeat 10` for `claude-opus-5`, `claude-sonnet-5` and `claude-haiku-4-5` with `--tier accelerated` and `--keep`, copy the draws into `calibration/`, re-derive with `tools/check_calibration.py`, and let the admission rule decide between `v2` and `warmup` — do not decide it by hand. **Done when** `meta.yaml` carries the block, `frozen_set` is no longer `unvalidated`, and the draws are checked in. | Immediately after item 3 | ~$2 |
+
+### 9.1 The counterexample already in `v2`, and what it suggests for debt item 1
+
+Written 2026-08-29, after the §2.0 gate refused every remaining laptop candidate.
+It is an argument rather than a decision, and the decision is Selim's.
+
+Three tasks in this repository discriminate at the top. Two of them satisfy
+§2.0's hazard clause and **both are accelerated**:
+
+| Task | Tier | Frontier rate | What makes it hard |
+|---|---|---|---|
+| `fused_rmsnorm_kernel` | accelerated/cuda | Opus 1/5 | Triton specialises an integer argument whose value is 1 |
+| `metal_cross_entropy_kernel` | accelerated/metal | Opus 8/10, Sonnet 4/10 | `half` is a type name in MSL, plus a group size the kernel does not choose |
+| `flash_attention_backward` | **laptop** | Opus 15/15, Sonnet 8/10 | the graded function is handed one block of keys and never the rest |
+
+The third one is the only laptop task in the repository that separates two
+frontier models, it is in `v2`, and **it does not satisfy §2.0 at all.** Nothing
+about it is an undocumented fact; flash attention has papers, tutorials and
+reference implementations. What makes it hard is L28's mechanism: the harness
+owns a decomposition the solution cannot choose and cannot see around, so `D`
+is a property of a whole query row that the graded function is structurally
+unable to compute, and an implementation that accumulates it from the columns in
+hand is wrong in exactly the way real blocked implementations are wrong.
+
+§2.0 was derived from the two accelerated tasks and generalised to the laptop
+tier without a laptop example. The laptop example exists and it works
+differently. So the honest reading of three consecutive refusals is not
+necessarily "the laptop tier is saturated"; it may be "candidates 1 through 4
+were all chosen against the wrong criterion for this tier".
+
+**The choice for the next task-writing session, stated so it can be answered in
+one word:**
+
+- **A — write candidate 2 against L28's mechanism instead of §2.0's hazard.**
+  A laptop task whose graded unit is handed one piece of a decomposition the
+  caller chose, where the correct answer needs state that piece does not have,
+  and where materialising the whole thing is unavailable rather than merely
+  discouraged. This is the only recipe with a laptop-tier track record here.
+  *Recommended.*
+- **B — keep hunting for a laptop hazard.** The gate stays as written and the
+  next session's job is to find a fact in numpy or torch with no page about it.
+  Honest, and §1.3's evidence is that the search space is thin.
+- **C — declare the tier saturated and reopen §1.2.** Cheapest, and it is the
+  one L35 warns about: an argument standing in for the measurement the rule
+  asks for. §1.2's condition is two *measured* attempts and there has been one.
+
+If A is chosen, §2.0 needs a sentence saying it is the accelerated tier's
+criterion and L28's mechanism is the laptop tier's, rather than one criterion
+pretending to cover both. That sentence is the actual output of this debt item.
