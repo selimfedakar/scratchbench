@@ -695,9 +695,109 @@ def test_every_status_is_classified_and_an_unknown_one_cannot_be_built():
     # is the solution failing, not the harness, so it stays a measurement.
     assert "timeout" not in NO_EVIDENCE
     assert "timeout" not in HARNESS_FAILURES
+    # And a run that never found a healthy process is the opposite of a
+    # timeout, which is the whole reason it has its own name: nothing judged
+    # the solution, so it must not reach a rate. docs/LESSONS.md L42.
+    assert "mps_stalled" in NO_EVIDENCE
+    assert "mps_stalled" in HARNESS_FAILURES
 
     with pytest.raises(ValueError, match="unclassified outcome status"):
         Outcome(slug="x", passed=False, status="something_new", duration_s=0.0)
+
+
+# -- the MPS stall guard ---------------------------------------------------
+
+
+def test_the_stall_guard_is_armed_only_for_the_tasks_that_need_it(tmp_path):
+    # Arming it on the CUDA task would be an assumption wearing a
+    # measurement's clothes: the stall is a measured property of this Mac and
+    # nothing has been measured on a rented CUDA box.
+    from runner.sandbox import STALL_GUARD_MODULE, add_stall_guard
+
+    metal = load_task(TASKS_ROOT / "metal_cross_entropy_kernel")
+    laptop = load_task(TASKS_ROOT / "softmax_stability")
+
+    metal_dir = tmp_path / "metal"
+    metal_dir.mkdir()
+    assert add_stall_guard(metal, metal_dir) is True
+    assert (metal_dir / f"{STALL_GUARD_MODULE}.py").exists()
+
+    laptop_dir = tmp_path / "laptop"
+    laptop_dir.mkdir()
+    assert add_stall_guard(laptop, laptop_dir) is False
+    assert list(laptop_dir.iterdir()) == []
+
+
+def test_the_guard_does_nothing_unless_the_environment_arms_it(monkeypatch):
+    # The module is imported by tools/check_mps_stall.py and copied into every
+    # Metal workdir, so an unconditional hook would probe in processes that
+    # have no reason to touch MPS at all.
+    from runner import mps_stall
+
+    monkeypatch.delenv(mps_stall.GUARD_ENV, raising=False)
+    monkeypatch.setattr(
+        mps_stall, "probe", lambda *args, **kwargs: pytest.fail("probed unarmed")
+    )
+    assert mps_stall.pytest_configure(config=None) is None
+
+
+def test_a_stalled_launch_is_retried_and_a_healthy_one_ends_the_loop(monkeypatch):
+    from runner import sandbox
+    from runner.mps_stall import STALLED_EXIT
+
+    calls = []
+
+    def fake_run_pytest(workdir, timeout_s, guarded=False):
+        calls.append(guarded)
+        # Stalled, stalled, then healthy: the alternation this defends against
+        # is not guaranteed to be perfect, so the loop must survive two.
+        code = STALLED_EXIT if len(calls) < 3 else 1
+        return code, "1 failed", 0.5
+
+    monkeypatch.setattr(sandbox, "run_pytest", fake_run_pytest)
+    returncode, output, seconds, attempts = sandbox.run_pytest_until_healthy(
+        Path("/nonexistent"), timeout_s=60, guarded=True
+    )
+    assert (returncode, attempts) == (1, 3)
+    assert output == "1 failed"
+    # The seconds reported are what the run cost in total, discards included.
+    assert seconds == pytest.approx(1.5)
+
+
+def test_an_unguarded_task_is_never_relaunched(monkeypatch):
+    from runner import sandbox
+    from runner.mps_stall import STALLED_EXIT
+
+    calls = []
+
+    def fake_run_pytest(workdir, timeout_s, guarded=False):
+        calls.append(guarded)
+        return STALLED_EXIT, "", 0.1
+
+    monkeypatch.setattr(sandbox, "run_pytest", fake_run_pytest)
+    returncode, _, _, attempts = sandbox.run_pytest_until_healthy(
+        Path("/nonexistent"), timeout_s=60, guarded=False
+    )
+    assert (returncode, attempts, calls) == (STALLED_EXIT, 1, [False])
+
+
+def test_every_attempt_stalling_is_reported_as_no_evidence(monkeypatch):
+    # The failure this whole mechanism exists to prevent: a stalled process
+    # recorded as a `timeout`, which is evidence and a failure, and therefore a
+    # published claim about a model that describes the machine instead.
+    from runner import sandbox
+    from runner.mps_stall import MAX_ATTEMPTS, STALLED_EXIT
+
+    def always_stalled(workdir, timeout_s, guarded=False):
+        return STALLED_EXIT, "", 0.1
+
+    monkeypatch.setattr(sandbox, "run_pytest", always_stalled)
+    task = load_task(TASKS_ROOT / "metal_cross_entropy_kernel")
+    outcome = sandbox.grade(task, reference_solve)
+
+    assert outcome.status == "mps_stalled"
+    assert outcome.status in sandbox.NO_EVIDENCE
+    assert str(MAX_ATTEMPTS) in outcome.detail
 
 
 # -- reading pytest's summary line ----------------------------------------
