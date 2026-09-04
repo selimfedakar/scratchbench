@@ -64,7 +64,7 @@ Python is Anaconda 3.10 at `/Users/selimfedakar/anaconda3/bin/python3`.
 | `runner/cli.py` | `scratchbench run` / `report` / `validate` |
 | `runner/report.py` | results JSON schema, aggregation, the printed table |
 | `adapters/` | model adapters. `reference.py` and `anthropic_api.py` are real; the OpenAI one is a skeleton class in `model_api.py`, not its own file. |
-| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the CUDA task's evidence, on a rented box), `mutate_metal_task.py` (the Metal task's, on any Apple silicon Mac), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws) |
+| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the CUDA task's evidence, on a rented box), `mutate_metal_task.py` (both Metal tasks' evidence, on any Apple silicon Mac; `--task <slug>` runs one), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws) |
 | `results/` | one JSON per run, gitignored except `.gitkeep` |
 | `leaderboard/` | published results, checked in by hand |
 | `calibration/` | the draws every `calibration:` block was computed from. Checked in, and re-derived in CI, because a task is refused from a frozen set on the strength of those numbers |
@@ -212,6 +212,65 @@ computed over. `accelerated` may set `requires_gpu: true` and must declare
 folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
+
+## State as of 2026-08-30, session 14 (verify before trusting)
+
+- **The third accelerated task exists and cannot be published.**
+  `metal_softmax_backward_kernel` (kernels, accelerated/metal, torch, **81 hidden
+  tests**): softmax backward per row, three threadgroup reductions sharing one
+  scratch array, the row written back instead of one number. L2 on both halves —
+  `81 passed  81 failed  ok` — and nineteen mutants, sixteen caught and three
+  surviving, all matching their expected verdicts. It carries
+  `frozen_set: unvalidated` and **no calibration block**.
+- **Why it is not calibrated, and this is the session's headline.** About half of
+  this suite's *failing* runs enter a state where every MPS operation in the
+  process is roughly a hundred times slower for the life of the process. Same
+  command, same idle machine, untouched starter: **1.0s, 1.4s, 33s, 124s, 278s,
+  312s, 344s, 2920s**. The reference is 1.2–3.7s every time and
+  `metal_cross_entropy_kernel`'s starter is under 1.4s ten times out of ten, so
+  it is this task and not the machine. Seven suspects killed by measurement, no
+  cause (**L41**). Because `time_limit_s` is 300s a wrong solution can be
+  recorded `timeout` rather than `failed` — the rate survives that, the failure
+  shape does not, and the failure shape is what this repository publishes instead
+  of partial credit. **Selim's decision on 2026-09-02: fix the instability first,
+  keep the draws as debt.** `ROADMAP.md` §9 item 3.
+- **Two mutant expectations were wrong, in opposite directions, and both were
+  findings.** The power-of-two fold *survived* because the softmax shift is
+  algebraically neutral, so a fold that drops lanes still yields a usable shift —
+  a real hole, closed by `test_the_largest_logit_in_every_position` (**L38**).
+  The missing write-after-read barrier at the *second* scratch reuse is *caught*,
+  8 runs of 8, where L32 said this hardware would not expose it: the variable is
+  how much work sits between the read and the reuse, not the device (**L39**).
+- **L37's gate was applied for the first time and refused all three remaining
+  laptop candidates**, with the framework's own docstrings quoted beside each
+  verdict in `ROADMAP.md` §1.3. A candidate that fails the gate before it is
+  written is not an attempt "against §2.0", so calibrating one would not advance
+  §4b's reopening condition. **§9.1 records the counterexample already in `v2`:**
+  `flash_attention_backward` discriminates and satisfies §2.0 not at all, so the
+  gate may be the accelerated tier's criterion and L28's mechanism the laptop
+  tier's. Three options, recommendation A, **decision still open**.
+- **`docs/ROADMAP.md` now has a §9 debt ledger.** Four open items; item 3 is the
+  critical path and item 1 is the next design decision.
+- **Two defects fixed in `tools/mutate_metal_task.py`, both found by using it.**
+  It waited 1800s per mutant and the divergent-barrier mutant spent all of it; it
+  now reads the task's own `time_limit_s` from `meta.yaml` and calls a timeout
+  `CAUGHT`. And its starter gate read a timeout as "fails cleanly", so a starter
+  that never answered would have certified the tests — `TIMED_OUT = 124` is now
+  distinct. ⚠ While item 3 is open, a `SURVIVES` mutant killed by the limit
+  reports `CAUGHT`; the printed `timed out after 300s` is what tells them apart.
+- **`docs/PATTERNS.md` does not exist** although the mandatory loading paragraph
+  above tells you to search it first. Debt item 2.
+- Numbers from this session's runs: harness suite **105 passed**;
+  `validate --tier all` **14 task(s) validated, 1 not checked here**;
+  `mutate_metal_task.py` **metal_cross_entropy_kernel: all 13 mutants behaved as
+  expected** and **metal_softmax_backward_kernel: all 19 mutants behaved as
+  expected**; `check_cost.py` **152 file(s) checked**; `check_calibration.py`
+  **26 entries re-derived from 152 draw(s)**. Fifteen tasks, **704** hidden
+  tests. Set counts: `v1` five, `v2` three, `warmup` six, `unvalidated` one.
+  Tiers: laptop twelve, accelerated three.
+- **Spend this session: $0.** No model was asked anything.
+- **Still open.** `v2` is unchanged at three members with one laptop task, and
+  its accelerated half is now complete in code and not in evidence.
 
 ## State as of 2026-08-21, session 13 (verify before trusting)
 
