@@ -46,7 +46,9 @@ That single constraint is the whole design:
 - **Grading is objective.** Tests pass or they do not. No judge model, no rubric, no argument.
 - **A full sweep costs tens of dollars, not thousands** — so it can be re-run the day a new model ships, not six months later.
 
-Thirteen tasks, 507 hidden tests, and the entire reference sweep finishes in **sixteen seconds**.
+Fifteen tasks and 704 hidden tests. Twelve of them run on any laptop and need
+nothing but Python; the other three need a GPU, are reported beside the headline
+with the hardware each one wants, and are never folded into it.
 
 ## The first rows
 
