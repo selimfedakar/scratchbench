@@ -61,10 +61,11 @@ Python is Anaconda 3.10 at `/Users/selimfedakar/anaconda3/bin/python3`.
 | `tasks/<slug>/` | one task: `meta.yaml`, `prompt.md`, `starter/`, `hidden_tests/`, `reference/` |
 | `runner/tasks.py` | task discovery and `meta.yaml` validation |
 | `runner/sandbox.py` | temp workdir assembly, seeding, timeout, pytest invocation, **and `STATUSES`: the one table saying which outcomes count as evidence** |
+| `runner/mps_stall.py` | the probe for this machine's per-process MPS stall, and the pytest hook that refuses to grade in one. Copied into a Metal task's workdir beside the hidden tests. `docs/LESSONS.md` L42 |
 | `runner/cli.py` | `scratchbench run` / `report` / `validate` |
 | `runner/report.py` | results JSON schema, aggregation, the printed table |
 | `adapters/` | model adapters. `reference.py` and `anthropic_api.py` are real; the OpenAI one is a skeleton class in `model_api.py`, not its own file. |
-| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the CUDA task's evidence, on a rented box), `mutate_metal_task.py` (both Metal tasks' evidence, on any Apple silicon Mac; `--task <slug>` runs one), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws) |
+| `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the CUDA task's evidence, on a rented box), `mutate_metal_task.py` (both Metal tasks' evidence, on any Apple silicon Mac; `--task <slug>` runs one), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws), `check_mps_stall.py` (the launch survey behind L42; imports the probe from `runner/mps_stall.py` rather than holding a second copy of the threshold) |
 | `results/` | one JSON per run, gitignored except `.gitkeep` |
 | `leaderboard/` | published results, checked in by hand |
 | `calibration/` | the draws every `calibration:` block was computed from. Checked in, and re-derived in CI, because a task is refused from a frozen set on the strength of those numbers |
@@ -242,10 +243,22 @@ set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
   has not been repeated is not a control**, and the ninety-second defence is to
   run the same configuration twice in a row before believing any difference
   between two configurations.
-- **Nothing is decided yet about the fix.** `ROADMAP.md` **§9.2** states three
-  responses — a start-up guard in `runner/sandbox.py`, a larger `time_limit_s`,
-  or publishing with the exposure documented — and recommends the guard.
-  **Selim's call, and §5's `v2` sweep waits on it.**
+- **Selim chose option A and the guard is in.** `runner/mps_stall.py` holds the
+  probe and a pytest hook; a Metal task's workdir gets it copied in beside the
+  hidden tests, after the solver has written, and pytest loads it with `-p`. A
+  stalled child exits **125** before a single test runs,
+  `run_pytest_until_healthy` relaunches up to four times, and a run where every
+  attempt stalls is **`mps_stalled`** — no evidence, harness failure — instead
+  of `timeout`. `validate --tier all` three times and
+  `validate --tasks metal_softmax_backward_kernel` **six times out of six**
+  clean, on the task that used to flap `BROKEN` and once took 2920 s. Harness
+  suite **110 passed** (was 105). `ROADMAP.md` §9.2.
+- **Next thing to spend money on: §9 item 5**, the thirty draws for
+  `metal_softmax_backward_kernel` (~$2). Its trigger is met. Until it has a
+  calibration block the task is `unvalidated` and belongs to no set, so `v2`
+  membership waits on it. Then item 6, the `metal_cross_entropy_kernel`
+  re-draw. **§5's sweep is further off than one session**: §5's own
+  precondition table now says which five things are open.
 - Unchanged from session 14: fifteen tasks, **704** hidden tests, `v1` five,
   `v2` three, `warmup` six, `unvalidated` one; laptop twelve, accelerated three.
   `metal_softmax_backward_kernel` is still `frozen_set: unvalidated` and still
