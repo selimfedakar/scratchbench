@@ -606,10 +606,11 @@ writing.
 |---|---|---|---|---|
 | 1 | 2026-08-29, §2.2 | **No laptop candidate passes the §2.0 gate**, and §9.1 below argues the gate may be the wrong instrument for this tier. The bank is exhausted (§1.3) and the replacement is a design question, not a writing task. Until it is answered, §1.2's reopening condition cannot advance and §5's `v2` sweep cannot start. This is the critical path. | §9.1, then a session of its own before §5 | $0 to decide, $3 to calibrate what it produces |
 | 2 | 2026-08-29, §2.1 | **`docs/PATTERNS.md` does not exist.** `CLAUDE.md`'s mandatory loading paragraph says to search it first for any bug. A rule pointing at a missing file trains the next session to skip the rule. Either write the file out of the L-entries that are really debugging patterns, or cut the clause. | §6.3, the claims audit | $0 |
-| 3 | 2026-08-30, §2.1 | 🔴 **`metal_softmax_backward_kernel` is finished and cannot be published**, because about half its failing runs are a hundred times slower for the life of the process. The untouched starter, same command, same idle machine: **1.0 s, 1.4 s, 33 s, 124 s, 278 s, 312 s, 344 s, 2920 s**. The reference is 1.2–3.7 s every time and the forward Metal task's starter is under 1.4 s ten times out of ten, so it is this task and not the machine. Seven suspects killed by measurement (`LESSONS.md` L41): status-line CPU starvation, the largest shapes, autograd in the expected value, memory (the slow run used *less*), the NaN sentinel, a kernel that writes nothing, the size of the compared tensors. **Consequence:** `time_limit_s` is 300 s, so a wrong solution can be recorded `timeout` rather than `failed` — the rate survives that, the failure shape does not, and the failure shape is what this repository publishes instead of partial credit. The task therefore ships `frozen_set: unvalidated` and uncalibrated. **Next step is not more theorising:** bisect the suite by halves against the forward task's structure until the smallest reproducer is found, or instrument one slow run with `MTL_DEBUG_LAYER` / Metal system trace. | Before §5's `v2` sweep — a sweep is the thing it would corrupt | $0 to diagnose, $2 to calibrate once it is fixed |
+| 3 | 2026-08-30, §2.1. **Diagnosed 2026-09-04, §9.2** | 🔴 **Found, and it is not the task.** On this machine every other process that touches `torch.mps` is stalled for its whole life: a host-to-device-to-host round trip costs 0.47–0.72 ms in a healthy process and 232–776 ms in a stalled one, with no overlap over fourteen consecutive launches, and the workload behind it takes 0.070–0.089 s against 8.055–10.899 s. It needs no custom shader (plain `torch.softmax` reproduces it), no failing test, and no particular task — `metal_cross_entropy_kernel`, which is **already published**, measured 1.89 s, 48.76 s, 1.50 s on three consecutive reference runs. The GPU is not busy while it happens: a second process launched into a 75-second stall did 50 MPS softmaxes in 0.687 s. `recoveryCount` is 0, a ten-second gap does not help, a keeper process holding an MPS context open does not help, and 2599 stack samples of a stalled process are all in `-[_MTLCommandBuffer waitUntilCompleted]`. Full account and the reasoning error that hid it for two sessions: `LESSONS.md` **L42**. Re-derive with `python tools/check_mps_stall.py --launches 14`. **What is still open is not the diagnosis but the response** — §9.2 states the three choices and the recommendation. | §9.2 decides it; the chosen fix lands before §5's `v2` sweep | $0 spent, $0 to decide |
+| 6 | 2026-09-04, §9.2 | 🟡 **`metal_cross_entropy_kernel`'s calibration was drawn on this machine while the stall was live and unknown.** Its published block therefore rests on draws that may contain `timeout` where the model actually produced a wrong answer. The rate survives that and the failure shape does not, which is the same argument that kept the backward task unpublished — applied, this time, to something already public. **Done when** the task has been re-drawn under whatever §9.2 chooses, or the leaderboard says in writing which draws predate the guard. | Immediately after §9.2 is decided, and before §6.3's claims audit signs anything | ~$2 to re-draw |
 | 3b | 2026-08-30, §2.1 | **Fixed on the way past, keep the reasoning.** `mutate_metal_task.py` waited 1800 s per mutant, and the mutant that returns out-of-range lanes before a barrier — undefined behaviour in MSL — spent every second of it. It now reads the task's own `time_limit_s` from `meta.yaml` and calls a timeout `CAUGHT`, which is what `STATUSES` does. Separately its starter gate read a timeout as "fails cleanly", so a starter that never answered would have certified the tests; One consequence to keep in view: a mutant that is expected to SURVIVE and happens to be killed by the limit is reported CAUGHT, so while item 3 is open a `did not match` on a SURVIVES line has two possible readings and the printed `timed out after 300s` is what tells them apart. `TIMED_OUT = 124` is now distinct from a real failure and stops the run with its own message. | done | $0 |
 | 4 | 2026-08-29, §2.1 | **L32's title is one notch more general than its evidence.** "The race this hardware refuses to show me" reads as a fact about the device; the backward kernel shows the same race at its second scratch reuse, so the fact is about the distance between the read and the write instead. The entry's body already scoped itself to "on this machine, on this driver, today" and predicted the failure would be news, so this is a title and a cross-reference to L39, not a retraction. `leaderboard/README.md` does not publish the claim and needs no change. | §6.3, the claims audit | $0 |
-| 5 | 2026-09-02, §2.1 | 🟡 **The thirty draws for `metal_softmax_backward_kernel` are owed.** Decided by Selim on 2026-09-02: fix item 3 first, then calibrate — because a leaderboard reader who sees `timeout` concludes the task is broken, and would be right. **Trigger:** item 3 closed, i.e. twenty consecutive runs of the untouched starter all under 5 s. **Then:** `--repeat 10` for `claude-opus-5`, `claude-sonnet-5` and `claude-haiku-4-5` with `--tier accelerated` and `--keep`, copy the draws into `calibration/`, re-derive with `tools/check_calibration.py`, and let the admission rule decide between `v2` and `warmup` — do not decide it by hand. **Done when** `meta.yaml` carries the block, `frozen_set` is no longer `unvalidated`, and the draws are checked in. | Immediately after item 3 | ~$2 |
+| 5 | 2026-09-02, §2.1 | 🟡 **The thirty draws for `metal_softmax_backward_kernel` are owed.** Decided by Selim on 2026-09-02: fix item 3 first, then calibrate — because a leaderboard reader who sees `timeout` concludes the task is broken, and would be right. **Trigger, restated 2026-09-04:** the old one — twenty consecutive starter runs under 5 s — is unreachable, because half of all launches stall whatever the task is (item 3, `LESSONS.md` L42). The trigger is now §9.2 decided and its fix landed, checked by `python tools/check_mps_stall.py --launches 14` reporting every launch healthy under the guard. **Then:** `--repeat 10` for `claude-opus-5`, `claude-sonnet-5` and `claude-haiku-4-5` with `--tier accelerated` and `--keep`, copy the draws into `calibration/`, re-derive with `tools/check_calibration.py`, and let the admission rule decide between `v2` and `warmup` — do not decide it by hand. **Done when** `meta.yaml` carries the block, `frozen_set` is no longer `unvalidated`, and the draws are checked in. | Immediately after item 3 | ~$2 |
 
 ### 9.1 The counterexample already in `v2`, and what it suggests for debt item 1
 
@@ -659,3 +660,38 @@ one word:**
 If A is chosen, §2.0 needs a sentence saying it is the accelerated tier's
 criterion and L28's mechanism is the laptop tier's, rather than one criterion
 pretending to cover both. That sentence is the actual output of this debt item.
+
+### 9.2 What to do about the stall, now that it is measured
+
+Written 2026-09-04, after debt item 3 turned out to be a property of the machine
+rather than of `metal_softmax_backward_kernel`. The measurement is settled and
+`tools/check_mps_stall.py` re-derives it; what is not settled is what the
+harness should do about it, and that is a change to the grading contract, so it
+is Selim's.
+
+The constraint that rules out doing nothing: `STATUSES` treats a `timeout` as
+evidence *and* as a failure, which is correct when a solution really did not
+finish. Under the stall a correct-shaped wrong answer and a stalled healthy run
+produce the same word. The pass rate tolerates that; the failure shape does not,
+and the failure shape is what this repository publishes instead of partial
+credit. Both Metal tasks are exposed, one of them already public (debt item 6).
+
+- **A — a start-up guard in `runner/sandbox.py`.** Before a graded run is
+  scored, the child calls `check_mps_stall.probe()`; if it exceeds the
+  threshold the run is discarded and relaunched, up to a small fixed number of
+  attempts, and a run that never gets a healthy process is reported as a harness
+  failure rather than as a `timeout`. Costs one new status meaning and a few
+  milliseconds per run. It is the only option that makes the recorded failure
+  shape mean what it says. *Recommended.*
+- **B — raise `time_limit_s` for the Metal tasks.** Cheapest to write. A stalled
+  run is roughly a hundred times slower, so honouring it means a limit near
+  30000 s, which is not a limit. It also silently makes a genuinely slow wrong
+  answer indistinguishable from a stalled one, which is the current problem with
+  a bigger number in front of it.
+- **C — publish the tasks with the exposure documented and no code change.**
+  Honest, and it moves the cost onto every reader of the leaderboard forever. It
+  is also the option that cannot be applied retroactively to draws already
+  taken.
+
+Whichever is chosen, `docs/LESSONS.md` L42 and this section are the record of
+why the numbers before the change and after it are not the same measurement.
