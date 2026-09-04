@@ -213,6 +213,45 @@ folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
 
+## State as of 2026-09-04, session 15 (verify before trusting)
+
+- **Debt item 3 is diagnosed, and the answer is that it was never the task.** On
+  this machine every other process that touches `torch.mps` is stalled for the
+  whole of its life. A host-to-device-to-host round trip costs **0.47–0.72 ms**
+  healthy and **232–776 ms** stalled, over fourteen consecutive launches with no
+  overlap, and the workload behind it takes **0.070–0.089 s** against
+  **8.055–10.899 s**. It needs no custom shader, no failing test and no
+  particular task. `tools/check_mps_stall.py --launches 14` re-derives it and
+  exports `probe()` / `is_stalled()`.
+- **`metal_cross_entropy_kernel` is exposed too, and it is already published.**
+  Three consecutive reference runs: **1.89 s, 48.76 s, 1.50 s**. Its calibration
+  draws were taken here before this was known, so a `timeout` among them may be
+  a stalled process rather than a model that could not answer — the rate
+  survives that, the failure shape does not. `ROADMAP.md` §9 **item 6**.
+- **Killed by measurement, not by argument.** The task, the custom shader, pass
+  versus fail, tensor retention, a busy GPU (a second process launched into a
+  75 s stall did 50 MPS softmaxes in **0.687 s**), a driver reset
+  (`recoveryCount` 0), the previous process tearing down (a ten second gap
+  changes nothing), the last Metal client exiting (a keeper process changes
+  nothing). 2599 stack samples of a stalled process are all in
+  `-[_MTLCommandBuffer waitUntilCompleted]` under `__psynch_cvwait`.
+- **The reasoning error is the headline, and it is L42.** A four-cell crossing
+  produced a mechanism that was confirmed in *both* directions and was still an
+  artefact: in every pairing, the slow cell was whichever ran second. L40 said a
+  cause explaining one observation is not the cause; **L42 says a control that
+  has not been repeated is not a control**, and the ninety-second defence is to
+  run the same configuration twice in a row before believing any difference
+  between two configurations.
+- **Nothing is decided yet about the fix.** `ROADMAP.md` **§9.2** states three
+  responses — a start-up guard in `runner/sandbox.py`, a larger `time_limit_s`,
+  or publishing with the exposure documented — and recommends the guard.
+  **Selim's call, and §5's `v2` sweep waits on it.**
+- Unchanged from session 14: fifteen tasks, **704** hidden tests, `v1` five,
+  `v2` three, `warmup` six, `unvalidated` one; laptop twelve, accelerated three.
+  `metal_softmax_backward_kernel` is still `frozen_set: unvalidated` and still
+  uncalibrated — for a different and now-known reason.
+- **Spend this session: $0.** No model was asked anything.
+
 ## State as of 2026-08-30, session 14 (verify before trusting)
 
 - **The third accelerated task exists and cannot be published.**
