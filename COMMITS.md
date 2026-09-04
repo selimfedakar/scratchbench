@@ -21,29 +21,46 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 bash ~/scratchbench-session15-commits.sh
 ```
 
-6 commits, and **one push at the end that carries session 14's thirteen as
-well**, because those were committed on 2026-09-02 and never pushed. Nineteen
-commits go out in one push. Nothing is squashed.
+Session 15 went out in **two batches**, because the diagnosis was pushed while
+the fix it argued for was still being written.
 
-Run this one only. `~/scratchbench-session14-push.sh` pushes the thirteen on
-their own and is redundant once this script has run; it is harmless either way.
+**Batch one, already committed and pushed** — six commits, `15eba19` through
+`a52b826`, carrying session 14's thirteen with them: the probe, L42, the debt
+ledger rewrite, journal 15, the state block, and the queue entry. Twenty-two
+commits, `main` clean against `origin/main`.
 
-`tools/check_mps_stall.py` goes first because everything in the four record
-files quotes numbers it produces, so the tool that re-derives them should not
-arrive after the claims.
+**Batch two, pending** — the guard Selim chose in §9.2, and the four record
+files updated to say it landed:
+
+```bash
+bash ~/scratchbench-session15-commits.sh
+```
+
+8 commits, **one push at the end**, no sleeps, nothing squashed.
+
+The order is one constraint and then tidiness. `runner/mps_stall.py` holds the
+threshold that `tools/check_mps_stall.py` imports and that `runner/sandbox.py`
+acts on, so it lands before either of them; the record files land last, because
+every number in them is produced by the code above.
 
 | # | File | What |
 |---:|---|---|
-| 1 | `tools/check_mps_stall.py` | the probe, the survey, and `is_stalled()` |
-| 2 | `docs/LESSONS.md` | L42, and the header that scopes L41 |
-| 3 | `docs/ROADMAP.md` | item 3 rewritten, item 6 opened, §9.2 added |
-| 4 | `docs/sessions/15-the-stall-was-never-the-tasks.md` | journal 15 |
-| 5 | `CLAUDE.md` | the session 15 state block |
-| 6 | `COMMITS.md` | this block |
+| 1 | `runner/mps_stall.py` | the probe, and the pytest hook that refuses to grade in a stalled process |
+| 2 | `runner/sandbox.py` | the `mps_stalled` status, the guard copy, the relaunch loop |
+| 3 | `tools/check_mps_stall.py` | rewritten to import the threshold instead of holding a second copy of it |
+| 4 | `tests/test_runner.py` | five tests: arming, retrying, and the status that must not be a `timeout` |
+| 5 | `docs/ROADMAP.md` | item 3 closed, §9.2 decided, §5's precondition table |
+| 6 | `docs/sessions/15-the-stall-was-never-the-tasks.md` | the guard, and what it does not do |
+| 7 | `CLAUDE.md` | the state block and the map |
+| 8 | `COMMITS.md` | this block |
+
+`docs/LESSONS.md` is not in the list: L42 went out in batch one and nothing
+about the guard changed what it says.
 
 No task files change and no draws are added, so `check_cost.py` and
-`check_calibration.py` have nothing new to re-derive; both were run before the
-queue was written and reported 152 files and 26 entries, unchanged.
+`check_calibration.py` have nothing new to re-derive; both were run after the
+guard landed and reported 152 files and 26 entries, unchanged. The harness suite
+is **110 passed**, up from 105.
 
 ### Session 14 — the second Metal task, and a gate that refused everything
 
