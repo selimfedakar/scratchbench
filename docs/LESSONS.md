@@ -13,6 +13,215 @@ Newest first.
 
 ---
 
+## L41 — Half the runs are a hundred times slower and I cannot say why
+
+**What I expected.** The new Metal task validated cleanly the first time: 81
+tests passed against the reference, 81 failed against the untouched starter, and
+the whole thing took 23 seconds. I expected that to keep being true.
+
+**What happened.** It is true about half the time. The same command, the same
+machine, nothing else running, the untouched starter:
+
+```
+1.0s   1.4s   33s   124s   278s   312s   344s   2920s
+```
+
+The reference, in those same runs, measured between 1.2 s and 3.7 s every single
+time. And `metal_cross_entropy_kernel` — the Metal task already published, whose
+starter also fails every one of its tests — ran ten times out of ten under 1.4 s.
+
+Inside a slow run the time is not in one place. `--durations` shows every test
+uniformly slower: 7.17 s, 7.01 s, 6.02 s, 5.86 s where the fast run's slowest
+test is 0.35 s. So the process enters a state, for its whole life, where every
+MPS operation costs about a hundred times what it should.
+
+**What I ruled out, each by a measurement rather than by argument.**
+
+| Suspect | How it died |
+|---|---|
+| CPU starvation from the status line | Real, and fixed — see below. The stall came back with the machine idle at load 1.8 |
+| The largest test, 128×4096 | Deselected it; a run still took 343.71 s |
+| `torch.autograd.grad` in the expected value | Replaced with a closed form; 1.29 s, 311.87 s, 1.07 s |
+| Memory pressure or swap | The **slow** run peaked at 261 MB against the fast runs' 326 and 330, with 14 page faults against 88 |
+| The NaN sentinel in the output buffer | Made it a finite 1e30; 1.36 s, 301.53 s, 1.33 s |
+| A kernel that writes nothing | Made the starter write zeros; the second run took over half an hour |
+| The size of the compared tensors | Restricted to shapes no bigger than 2×1000; 1.75 s, 1.02 s, 124.63 s, 1.12 s |
+
+Seven suspects, seven measurements, no cause.
+
+**What it costs, precisely.** `time_limit_s` is 300 s and `STATUSES` calls a
+killed run `timeout`: evidence, and a failure. So a pass rate computed over
+draws affected by this is still *sound* — a solution that would have failed is
+recorded as failing. What is not sound is the failure *shape*, and the failure
+shape is the thing this repository publishes instead of partial credit. It is
+most of what journals 09 through 13 are made of.
+
+**What changed.** The task ships `frozen_set: unvalidated` and is not
+calibrated. Thirty draws would have cost about two dollars and produced pass
+rates I could defend beside failure shapes I could not, and publishing the
+second alongside the first is how a benchmark stops being worth reading. The
+`meta.yaml` says so in the file rather than in my head, and `ROADMAP.md`
+section 9 item 3 carries it as the thing to fix before the `v2` sweep — which is
+the run it would corrupt.
+
+**What it cost.** The session's second half, a task that is finished and cannot
+be published yet, and the reminder that "I verified it once" and "it is
+reproducible" are different claims. The first `validate` of this task was green.
+So was the second. The third was `BROKEN`.
+
+## L40 — I found a cause, and stopped looking
+
+**What I expected.** `validate` returned `BROKEN  starter timed out instead of
+failing` on a task whose starter fails in under two seconds. I went looking for
+the cause and I found one, and it was real: `ccusage`, the process that draws my
+terminal's status line, was at 748 percent CPU on a ten-core machine. Sampled
+once a second for six seconds it was above 98 percent in five of them. I killed
+it and the suite that would not finish in ten minutes ran in 1.98 s.
+
+That is a clean experiment with a clean result, and I wrote the finding up,
+disabled the status line, updated the note that had predicted this exact
+regression, and moved on.
+
+**What happened.** The symptom came back with the machine idle at load 1.8 and
+nothing above ten percent in `ps`. Twice. Then five more times.
+
+**Where I went wrong, and it is not the debugging.** Finding `ccusage` was
+correct work. The tell that took me too long — `real 17,42` against `user 2,01`,
+a program that is starved rather than slow — is a good tell and it is now a card
+in the note. The error was what I did *after* the fix worked: I had one
+observation, "kill it and the slow run becomes fast", and I treated it as an
+explanation of every slow run I had seen. It explained one.
+
+The give-away was available and I did not look at it: the slow runs I already
+had in hand were **1.98 s, 33 s, 278 s, 2920 s**. A single cause that switches
+on and off does not produce a spread like that. Four points, three orders of
+magnitude, and I read them as one phenomenon because I had a story.
+
+**What changed.** L41 is the honest state of the actual problem, with seven
+suspects killed by measurement and no cause. And the rule I broke, written where
+I will hit it: **a cause that explains one observation is not the cause.** Before
+closing an investigation, list the observations the fix has to account for and
+check it against all of them, not against the one that prompted it.
+
+**What it cost.** An hour recovered and then several more spent, because the
+second investigation started from a conclusion I had already banked. The status
+line stays off — that part was a genuine win, it is still eating cores when it
+runs, and the measurement stands on its own.
+
+## L39 — The race was never about the hardware. It is about the distance.
+
+**What I expected.** L32 is titled "The race this hardware refuses to show me".
+The forward Metal kernel reads the row maximum out of `scratch[0]` and every
+thread then overwrites the scratch; dropping the barrier between those two is a
+textbook write-after-read race, and I hunted it over thirty configurations
+without ever making it fail. The mutant is checked in expecting `SURVIVES`, and
+I wrote at the time that a machine which caught it would be news.
+
+The backward kernel reuses one scratch array three times instead of once, so I
+wrote the same mutant at the second reuse and gave it the same expectation. It
+seemed like bookkeeping.
+
+**What happened.** It is caught, and reliably:
+
+```
+trial 1: CAUGHT    23 failed, 58 passed
+trial 2: CAUGHT    22 failed, 59 passed
+trial 3: CAUGHT    22 failed, 59 passed
+trial 4: CAUGHT    22 failed, 59 passed
+trial 5: CAUGHT    22 failed, 59 passed
+trial 6: CAUGHT    22 failed, 59 passed
+```
+
+Eight runs of eight across two sessions of the same machine, with the same
+mutant one reduction earlier surviving all 81 tests in the same pass.
+
+**Why, and it is not the device.** The two sites differ in what sits between the
+read and the reuse. At the maximum, every thread reads `scratch[0]` and then
+walks its whole strided slice of the row before it writes anything back — a
+hundred-odd iterations of loads and an exponential each. The read is finished
+everywhere long before the first write lands, so the window never opens. At the
+denominator, the value the threads are about to publish was computed in that
+same pass and is already sitting in a register: the read is followed
+*immediately* by the write, and the fastest lane clobbers `scratch[0]` while
+slower lanes are still reading it.
+
+So L32's explanation — Apple's scheduler keeps simdgroups close enough in
+lockstep that the window never opens — is the right shape and the wrong
+variable. The window is not a property of the scheduler alone. It is the
+scheduler's spread measured against the work the program puts between the read
+and the write, and the forward kernel happened to put a whole pass of the row
+there.
+
+**Where I nearly went wrong.** My first move was to change the expectation to
+`SURVIVES` and get on with the session, because that is what the sibling mutant
+does and the difference looked like noise. What stopped it was the script
+refusing to agree with me: the expectation is checked in both directions, so a
+survivor that is caught fails the run and has to be explained rather than
+adjusted. That is the third time the two-way expectation has produced a finding
+instead of a shrug (L31, L36, this).
+
+The second near-miss is quieter. The failure count moves between 21 and 23 from
+run to run, so my instinct was to call the mutant flaky and delete it. The
+*verdict* is stable across eight runs; only the blast radius wobbles, which is
+exactly what a real race looks like and is worth recording as such.
+
+**What changed.** The mutant is checked in expecting `CAUGHT`, with the count
+range in its description so nobody later reads a 21 as a regression from a 22.
+L32 keeps its evidence and loses its generality: its title claims a fact about
+the device and its body already scoped itself to "on this machine, on this
+driver, today", which is the sentence that turned out to be doing the work.
+
+**What it cost.** Nothing but the runs, and it bought the backward task a real
+barrier: the forward kernel's write-after-read discipline is unenforceable by
+any test I could write, and this one's is enforced.
+
+## L38 — A survivor that really was a hole, and the reason it hid
+
+**What I expected.** The backward kernel's mutants are the forward kernel's
+mutants with three more reductions to aim at, so I gave each one the verdict its
+sibling got. The power-of-two fold — `for (stride = tpg >> 1; stride > 0;
+stride >>= 1)`, the halving that drops entries whenever the group size is not a
+power of two — is caught by the forward task, and a real model wrote it
+unprompted in one of Sonnet's draws. I expected it caught here too.
+
+**What happened.** It passed all 76 tests.
+
+**Why it hid, and this is the part I would not have guessed.** The broken fold
+computes the row maximum over only the lanes its binary tree reaches. At
+`tpg = 7` that is lanes 0, 1, 3 and 4; lanes 2, 5 and 6 are dropped. So the shift
+is not the row's maximum — it is *a* value from the row.
+
+And the softmax does not care. Shifting a row by any constant leaves the answer
+algebraically identical; the maximum is chosen for conditioning, not for
+correctness. On a row of ordinary logits, a shift that is merely close enough
+keeps every exponential inside float32 and the answer is right to the last bit
+the tolerance asks for. The forward task caught this mutant on exactly one test
+of its sixty-eight. My suite had no test where a dropped lane held a value the
+shift actually had to see.
+
+**Where I nearly went wrong.** L31 is the entry about mistaking a correct
+program for a hole in my tests, and its lesson — the reflex to add more
+parametrisations is usually the wrong one — is strong enough that I spent a
+while constructing the argument for `SURVIVES`. The argument was even true:
+every input the suite had really is insensitive to which lane is dropped. It was
+also the wrong question. L31's survivors are programs no test *can* separate;
+this one is separated by any row whose maximum is large enough to matter and
+sits in a lane the tree misses.
+
+**What changed.** One test, `test_the_largest_logit_in_every_position`: a seven
+by seven matrix whose maximum walks the diagonal, at five group sizes that do
+not divide it. Three of the five catch the mutant — 3, 5 and 7, where the
+dropped lanes own real columns — and 9 and 33 do not, because there the dropped
+lanes hold no column at all and carry the identity. It is licensed by the
+sentence the prompt already had about logits reaching several hundred, and the
+mutant now reads `3 failed, 78 passed`.
+
+**What it cost.** Nothing, and it is the cheapest lesson of the session, because
+the mutation script asked the question for me. The version of this task I would
+have shipped without it has a reduction whose correctness no test enforces at
+the one group size a model is most likely to get wrong — and `metal_cross_entropy_kernel`
+is on the leaderboard today partly because a real model wrote that exact fold.
+
 ## L37 — "A fact about a tool" was never the criterion. "A fact with no tutorial" is.
 
 **What I expected.** L30 told me the laptop tier's reasoning tasks were
