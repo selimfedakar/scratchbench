@@ -435,6 +435,32 @@ honest description of what this benchmark measures. Write that up in
   writing the next accelerated task in Metal rather than CUDA, and it does not
   weaken the case in section 3 for making the laptop tier harder.
 
+  **The backward kernel was written on 2026-08-30 and is finished but
+  unpublished.** `metal_softmax_backward_kernel` is the third accelerated task
+  this section promised: softmax backward per row, three threadgroup reductions
+  sharing one scratch array, the row written back instead of a single number, and
+  the same caller-chosen group size. It is L2 on both halves — 81 hidden tests
+  pass against the reference and all 81 fail against the untouched starter — and
+  mutation-tested with nineteen mutants, two of whose expected verdicts turned
+  out to be wrong in opposite directions (`LESSONS.md` L38 and L39, and the
+  second of those buys the task a barrier the forward kernel's tests cannot
+  enforce).
+
+  It carries `frozen_set: unvalidated` and no `calibration:` block, for a reason
+  that is about measurement rather than about the task. Roughly half of its
+  failing runs enter a state where every MPS operation in the process is about a
+  hundred times slower for the life of that process; the reference is unaffected
+  and the forward task is unaffected, and seven candidate causes have been killed
+  by measurement without finding one (`LESSONS.md` L41). Because `time_limit_s`
+  is 300 s, a wrong solution can be recorded `timeout` rather than `failed`. A
+  pass rate survives that — `STATUSES` counts a timeout as evidence and as a
+  failure — but the failure shape does not, and section 6-3 of this document is
+  the promise that the failure shape is what gets published. So the draws wait
+  until the instability is understood. `ROADMAP.md` section 9 item 3.
+
+  This means `v2` still has three members and its accelerated half is complete in
+  code and not in evidence.
+
 ## 6. Measurement changes that ship with v2
 
 Harder tasks alone would produce noisier single draws, which is a worse
