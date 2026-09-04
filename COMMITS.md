@@ -15,6 +15,36 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 
 ## Pending
 
+### Session 15 — the stall was never the task's
+
+```bash
+bash ~/scratchbench-session15-commits.sh
+```
+
+6 commits, and **one push at the end that carries session 14's thirteen as
+well**, because those were committed on 2026-09-02 and never pushed. Nineteen
+commits go out in one push. Nothing is squashed.
+
+Run this one only. `~/scratchbench-session14-push.sh` pushes the thirteen on
+their own and is redundant once this script has run; it is harmless either way.
+
+`tools/check_mps_stall.py` goes first because everything in the four record
+files quotes numbers it produces, so the tool that re-derives them should not
+arrive after the claims.
+
+| # | File | What |
+|---:|---|---|
+| 1 | `tools/check_mps_stall.py` | the probe, the survey, and `is_stalled()` |
+| 2 | `docs/LESSONS.md` | L42, and the header that scopes L41 |
+| 3 | `docs/ROADMAP.md` | item 3 rewritten, item 6 opened, §9.2 added |
+| 4 | `docs/sessions/15-the-stall-was-never-the-tasks.md` | journal 15 |
+| 5 | `CLAUDE.md` | the session 15 state block |
+| 6 | `COMMITS.md` | this block |
+
+No task files change and no draws are added, so `check_cost.py` and
+`check_calibration.py` have nothing new to re-derive; both were run before the
+queue was written and reported 152 files and 26 entries, unchanged.
+
 ### Session 14 — the second Metal task, and a gate that refused everything
 
 ```bash
