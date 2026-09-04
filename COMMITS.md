@@ -15,6 +15,44 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 
 ## Pending
 
+### Session 14 — the second Metal task, and a gate that refused everything
+
+```bash
+bash ~/scratchbench-session14-commits.sh
+```
+
+13 commits, **one push at the end**, no sleeps between commits. Nothing is
+squashed.
+
+**No calibration draws this time, so there is no first push of results files.**
+The task is finished and deliberately uncalibrated: about half of its failing
+runs enter a state where every MPS operation in the process is a hundred times
+slower, which turns a wrong solution into a `timeout` rather than a `failed`.
+The pass rate would survive that and the failure shape would not. `meta.yaml`
+carries `frozen_set: unvalidated` and says why, so the loader is not being
+argued with — it is being told the truth.
+
+| # | File | What |
+|---:|---|---|
+| 1 | `tasks/…/reference/softmax_backward_kernel.py` | three reductions, one scratch array |
+| 2 | `tasks/…/hidden_tests/test_softmax_backward_kernel.py` | 81 tests, tolerance from a measurement |
+| 3 | `tasks/…/starter/softmax_backward_kernel.py` | the signature and nothing else |
+| 4 | `tasks/…/prompt.md` | written last, on purpose |
+| 5 | `tasks/…/meta.yaml` | unvalidated, with the reason in the file |
+| 6 | `tools/mutate_metal_task.py` | both Metal tasks; runs bounded by the task's own limit |
+| 7 | `README.md` | task and test counts |
+| 8 | `docs/V2_DESIGN.md` | §5, the third accelerated task |
+| 9 | `docs/LESSONS.md` | L38, L39, L40, L41 |
+| 10 | `docs/ROADMAP.md` | §1.3 gate verdicts, §2.2, §9 debt ledger, §9.1 |
+| 11 | `docs/sessions/14-…md` | journal 14 |
+| 12 | `CLAUDE.md` | state |
+| 13 | `COMMITS.md` | this |
+
+One ordering note that still holds from session 13: `meta.yaml` without
+`hidden_tests/` beside it is a task the loader refuses, so any tip inside
+commits 1 through 5 is red on a commit that is not wrong. The single push at the
+end makes it moot.
+
 ### Session 13 — a laptop task, refused, and what it taught
 
 Two runs, because the push cadence changed in the middle of the session.
