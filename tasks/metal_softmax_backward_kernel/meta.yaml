@@ -1,0 +1,48 @@
+slug: metal_softmax_backward_kernel
+version: 1
+category: kernels
+difficulty: 4
+probes: >
+  Whether the model can hold three threadgroup reductions and their barriers in
+  one Metal kernel: the row maximum, the softmax denominator under that shift,
+  and the contraction of the upstream gradient against a softmax that is never
+  materialised — then rebuild the softmax from the same shift and write the row
+  back, with a group size the kernel does not choose and does not divide the row.
+time_limit_s: 300
+tier: accelerated
+requires_gpu: true
+accelerator: metal
+deps: [torch]
+added: 2026-08-30
+# Written and verified on an M1 Pro on 2026-08-30. The reference passes 81
+# hidden tests and the untouched starter fails all 81 with assertion errors.
+# Nineteen mutants, sixteen caught and three expected to survive, every one
+# carrying the verdict it was written to get; tools/mutate_metal_task.py re-runs
+# the pass. Two of those expectations were wrong when first written and both
+# were findings rather than bookkeeping: docs/LESSONS.md L38 and L39.
+#
+# The tolerance in the hidden tests is a measurement, not a guess. Over every
+# configuration the file ships, the reference's worst absolute deviation from a
+# float64 CPU autograd gradient is 9.9e-8 and its worst absolute row sum is
+# 2.0e-7, against an ATOL of 2e-6.
+#
+# NOT CALIBRATED, AND DELIBERATELY NOT IN A NUMBERED SET.
+# This task has an instability that the forward Metal task does not, measured on
+# 2026-08-30 and not explained. A run of this suite in which many tests fail
+# enters, about half the time, a state where every MPS operation in that process
+# is roughly a hundred times slower for the life of the process — the untouched
+# starter has measured 1.0 s, 1.4 s, 33 s, 124 s, 278 s, 312 s, 344 s and 2920 s
+# on the same command and the same quiet machine, while the reference has
+# measured 1.2 s to 3.7 s every time and metal_cross_entropy_kernel's starter ran
+# 10 times out of 10 under 1.4 s. Ruled out by measurement: CPU starvation, the
+# largest shapes, autograd in the expected value, peak memory (a slow run used
+# *less*), the NaN sentinel, and a kernel that writes nothing.
+#
+# Why that blocks the calibration rather than merely annoying: time_limit_s is
+# 300 s, so a wrong solution can be killed and recorded `timeout` instead of
+# `failed`. Both are evidence and both are failures, so a pass rate would still
+# be sound — but the failure shapes would not be, and the failure shapes are what
+# this repository publishes instead of partial credit. Paying for thirty draws to
+# collect shapes known to be unreliable is the kind of number this repository
+# exists to refuse. docs/ROADMAP.md section 9 item 3 carries it.
+frozen_set: unvalidated
