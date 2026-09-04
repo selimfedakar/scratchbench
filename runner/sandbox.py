@@ -19,7 +19,18 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .mps_stall import GUARD_ENV, MAX_ATTEMPTS, STALLED_EXIT
 from .tasks import Task, available_accelerators
+
+#: The name the stall guard is copied into a graded workdir under. Distinctive
+#: enough that no solution and no hidden test module can collide with it.
+STALL_GUARD_MODULE = "_scratchbench_mps_stall"
+
+#: Accelerators whose runs go through the guard. Only Metal so far, because the
+#: stall is a measured property of this machine and nothing says the rented CUDA
+#: box has anything like it — arming the guard there would be an assumption
+#: wearing a measurement's clothes.
+GUARDED_ACCELERATORS = frozenset({"metal"})
 
 # The two exit codes that mean the suite actually ran and reached a verdict.
 # Everything else — a collection error, no tests found, an internal error —
@@ -78,6 +89,13 @@ STATUSES: dict[str, StatusMeaning] = {
     # The adapter never produced a gradeable file: an API error, a refusal, a
     # truncated response, a substituted model.
     "adapter_error": StatusMeaning("ADAPTER", evidence=False, harness_failure=True),
+    # Every attempt landed in a process where MPS is a hundred times slower for
+    # the life of that process, so nothing judged the solution. This is the
+    # status that exists so the alternative does not: without it a stalled run
+    # is recorded `timeout`, which is evidence and a failure, and the failure
+    # shape this repository publishes would be describing the machine.
+    # `runner/mps_stall.py` and `docs/LESSONS.md` L42.
+    "mps_stalled": StatusMeaning("STALLED", evidence=False, harness_failure=True),
     # The task declares dependencies this machine does not have.
     "missing_deps": StatusMeaning("SKIPPED", evidence=False, harness_failure=False),
     # The task needs an accelerator this machine does not have.
@@ -145,7 +163,20 @@ def add_hidden_tests(task: Task, workdir: Path) -> None:
         shutil.copy2(source, workdir / source.name)
 
 
-def pytest_environment() -> dict[str, str]:
+def add_stall_guard(task: Task, workdir: Path) -> bool:
+    """Copy the MPS stall guard in beside the hidden tests, if this task needs it.
+
+    Copied at the same moment and for the same reason as the hidden tests: a
+    solver cannot subvert a file that is not on disk while it is writing.
+    """
+    if task.accelerator not in GUARDED_ACCELERATORS:
+        return False
+    source = Path(__file__).with_name("mps_stall.py")
+    shutil.copy2(source, workdir / f"{STALL_GUARD_MODULE}.py")
+    return True
+
+
+def pytest_environment(guarded: bool = False) -> dict[str, str]:
     """A deterministic, offline environment for the graded run."""
     env = dict(os.environ)
     env["PYTHONHASHSEED"] = "0"
@@ -156,10 +187,16 @@ def pytest_environment() -> dict[str, str]:
     env["MKL_NUM_THREADS"] = "1"
     env["TOKENIZERS_PARALLELISM"] = "false"
     env.pop("PYTHONPATH", None)
+    if guarded:
+        env[GUARD_ENV] = "1"
+    else:
+        env.pop(GUARD_ENV, None)
     return env
 
 
-def run_pytest(workdir: Path, timeout_s: int) -> tuple[int | None, str, float]:
+def run_pytest(
+    workdir: Path, timeout_s: int, guarded: bool = False
+) -> tuple[int | None, str, float]:
     """Run the tests in `workdir`. Returns (returncode, output, seconds)."""
     command = [
         sys.executable,
@@ -172,12 +209,14 @@ def run_pytest(workdir: Path, timeout_s: int) -> tuple[int | None, str, float]:
         "-p",
         "no:randomly",
     ]
+    if guarded:
+        command += ["-p", STALL_GUARD_MODULE]
     started = time.perf_counter()
     try:
         completed = subprocess.run(
             command,
             cwd=workdir,
-            env=pytest_environment(),
+            env=pytest_environment(guarded),
             capture_output=True,
             text=True,
             timeout=timeout_s,
@@ -189,6 +228,33 @@ def run_pytest(workdir: Path, timeout_s: int) -> tuple[int | None, str, float]:
 
     elapsed = time.perf_counter() - started
     return completed.returncode, completed.stdout + completed.stderr, elapsed
+
+
+def run_pytest_until_healthy(
+    workdir: Path, timeout_s: int, guarded: bool
+) -> tuple[int | None, str, float, int]:
+    """Run the tests, relaunching while the child reports itself stalled.
+
+    Returns (returncode, output, seconds, attempts). The seconds are the sum
+    across attempts, because that is what the run actually cost; a discarded
+    attempt is a few milliseconds, since the guard fires before the first test.
+
+    When every attempt stalls the returncode stays `STALLED_EXIT` and the caller
+    turns it into a status. Retrying rather than reporting on the first stall is
+    the whole point: launches alternate, so the second attempt is almost always
+    healthy, and a run that silently costs one extra process is much cheaper
+    than a leaderboard row that describes the machine.
+    """
+    total = 0.0
+    attempts = 0
+    returncode: int | None = STALLED_EXIT
+    output = ""
+    for attempts in range(1, (MAX_ATTEMPTS if guarded else 1) + 1):
+        returncode, output, elapsed = run_pytest(workdir, timeout_s, guarded)
+        total += elapsed
+        if returncode != STALLED_EXIT:
+            break
+    return returncode, output, total, attempts
 
 
 def starter_collects_cleanly(task: Task) -> bool:
@@ -214,7 +280,10 @@ def starter_collects_cleanly(task: Task) -> bool:
     try:
         assemble(task, task.starter_dir, baseline)
         add_hidden_tests(task, baseline)
-        returncode, output, _ = run_pytest(baseline, task.time_limit_s)
+        guarded = add_stall_guard(task, baseline)
+        returncode, output, _, _ = run_pytest_until_healthy(
+            baseline, task.time_limit_s, guarded
+        )
         return returncode == PYTEST_TESTS_FAILED and not parse_summary(output).get("error")
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
@@ -276,8 +345,25 @@ def grade(task: Task, solve, keep_workdir: Path | None = None) -> Outcome:
             )
 
         add_hidden_tests(task, workdir)
+        guarded = add_stall_guard(task, workdir)
 
-        returncode, output, elapsed = run_pytest(workdir, task.time_limit_s)
+        returncode, output, elapsed, attempts = run_pytest_until_healthy(
+            workdir, task.time_limit_s, guarded
+        )
+
+        if returncode == STALLED_EXIT:
+            return Outcome(
+                slug=task.slug,
+                passed=False,
+                status="mps_stalled",
+                duration_s=elapsed,
+                returncode=returncode,
+                detail=(
+                    f"every one of {attempts} attempts landed in a stalled MPS "
+                    "process; nothing judged the solution"
+                ),
+                output=output,
+            )
 
         if returncode is None:
             return Outcome(
