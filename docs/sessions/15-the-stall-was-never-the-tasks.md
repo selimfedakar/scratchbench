@@ -204,6 +204,62 @@ once took 2920 s. Six consecutive runs, longest 14.35 s. The harness suite gaine
 five tests and lost more than half its wall time, because it grades the Metal
 tasks too and had been paying the stall all along without anyone noticing.
 
+## Thirty draws, and the defect that was already published
+
+With the guard in, the two debts the stall had been holding up became one sweep:
+`--tier accelerated --repeat 10` for Opus, Sonnet and Haiku collects
+`metal_softmax_backward_kernel`'s first calibration and
+`metal_cross_entropy_kernel`'s re-draw at the same time. Thirty draws, sixty
+gradings, $3.87.
+
+The number that matters most is a zero. **No `timeout`, no `mps_stalled`, no
+`collection_error` in any of the sixty.** That is the guard's field evidence, and
+it is a different claim from the six clean `validate` runs: those were the
+reference and the starter, these are twenty-one solutions that did not import,
+seven that failed on their merits, and thirty-two that passed.
+
+The admission rule decided the set, not me:
+
+| Task | Opus 5 | Sonnet 5 | Haiku 4.5 | Set |
+|---|---:|---:|---:|---|
+| `metal_softmax_backward_kernel` | 8/10 | 6/10 | 2/10 | **v2** |
+
+The top two rates are 80% and 60%, so the frontier does not clear it. What the
+failure shape says is more interesting than the rate: every one of Opus's two
+losses and Sonnet's four is a Metal compile error, not a wrong answer. The three
+reductions — the thing the task was written to probe — are apparently not the
+hard part. The type and address-space rules around a `threadgroup` array shared
+by all three of them are. That is the second time a Metal task in this
+repository has turned out to measure MSL's declaration rules rather than the
+algorithm (`metal_cross_entropy_kernel` and `half`), and it is worth saying out
+loud before a third one is written.
+
+Then the re-draw found something I had written down as a risk and not checked.
+Before spending the two dollars I counted what was already in `calibration/` and
+`leaderboard/`:
+
+```
+metal_cross_entropy_kernel  claude-haiku-4-5
+  {'solution_error': 6, 'adapter_error': 1, 'passed': 1, 'timeout': 1, 'failed': 1}
+```
+
+One `timeout`, in published evidence, in the denominator of a rate this
+repository prints, since 2026-08-13. Debt item 6 had described that as something
+that *might* have happened. It had already happened, and it was countable in
+thirty seconds by anything that could read a dictionary. `LESSONS.md` L43 is
+that, and the lesson is not about the stall: **a risk stated about data you
+already hold is not a risk, it is an unread measurement.**
+
+The draw stays counted as a failure. Removing it would improve Haiku's rate on
+the strength of something learned after seeing which way the draw went, and a
+benchmark that edits its own evidence in the direction it just learned about has
+stopped measuring. It is also the conservative direction — a `timeout` scored as
+a failure can only understate a model — and both `meta.yaml` and `README.md` now
+say so in the file rather than in my head. The block is twenty draws per model:
+Opus 14/20, Sonnet 12/20, Haiku 3/19.
+
+`unvalidated` is now empty. `v1` five, `v2` four, `warmup` six.
+
 ## What this does not do
 
 It does not explain the stall. Nothing here says why every other process on this
