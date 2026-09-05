@@ -13,6 +13,54 @@ Newest first.
 
 ---
 
+## L43 — I wrote the exposure into the ledger and did not check whether it had already happened
+
+**What I expected.** L42 ended with a consequence I recorded as a risk:
+`metal_cross_entropy_kernel` is published, its calibration draws were taken on
+this machine before the stall was known, so a `timeout` among them might be a
+stalled process rather than a model that could not answer. I wrote that as debt
+item 6, scheduled it, and moved on to building the guard. It read like diligence.
+
+**What happened.** Item 6 says "re-draw", so before spending the two dollars I
+counted what was already checked in. Thirty seconds of tallying:
+
+```
+metal_cross_entropy_kernel  claude-haiku-4-5
+  {'solution_error': 6, 'adapter_error': 1, 'passed': 1, 'timeout': 1, 'failed': 1}
+```
+
+One `timeout`. In the published evidence. In the denominator of the rate
+`meta.yaml` claims and `README.md` prints, since 2026-08-13. The risk I had
+written down as something that *could* have happened had already happened, and
+it had been sitting in a checked-in JSON file the whole time, countable by
+anything that could read a dictionary.
+
+**Where I went wrong.** Writing a risk down feels like handling it. It is not
+the same act, and the gap between them has a tell: **a risk stated about data
+you already have is not a risk, it is an unread measurement.** The debt ledger
+is for work that has to be scheduled. "Does this defect appear in my published
+evidence" is not work, it is a query, and it should have run in the same minute
+the defect was understood — before the guard, before the roadmap edit, before
+the journal.
+
+The near-miss is that I nearly re-drew the task without ever counting the old
+draws. I would have got clean new numbers, replaced the block, and never
+learned that the published one was wrong, which is the same outcome as not
+looking.
+
+**What changed.** The draw stays counted as a failure. Removing it would improve
+Haiku's rate on the strength of a fact discovered after seeing which way the
+draw went, and a benchmark that edits its own evidence in the direction it just
+learned about is not measuring anything. It is also the conservative direction:
+a `timeout` scored as a failure can only understate a model, never flatter one.
+`meta.yaml` says all of this in the file, `README.md` says it on the page, and
+the block is now twenty draws per model: the ten from 2026-08-13 plus ten taken
+under the guard.
+
+**What it cost.** Nothing, this time, and only because item 6 happened to say
+"re-draw" rather than "document". Had it said the second thing I would have
+written a paragraph about an exposure and never opened the file that proved it.
+
 ## L42 — It was never the task. Every other process on this machine is stalled.
 
 **What I expected.** L41 left seven suspects dead and no cause, and every one of
