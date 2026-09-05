@@ -29,8 +29,38 @@ the fix it argued for was still being written.
 ledger rewrite, journal 15, the state block, and the queue entry. Twenty-two
 commits, `main` clean against `origin/main`.
 
-**Batch two, pending** — the guard Selim chose in §9.2, and the four record
-files updated to say it landed:
+**Batch three, pending** — thirty calibration draws and everything they settle:
+
+```bash
+bash ~/scratchbench-session15-calibration.sh
+```
+
+38 commits: one per draw file, the way every calibration in this repository has
+been committed, then the metadata the draws license, then the record. One push
+at the end.
+
+The order is a hard constraint, not tidiness. All thirty draws must land before
+either `meta.yaml`, because `tools/check_calibration.py` runs in CI and
+re-derives every block from the files in `calibration/` and `leaderboard/` — a
+block that arrives before its evidence is a red build that is telling the truth.
+
+| Group | Files | What |
+|---|---|---|
+| 1 | `calibration/*.json` ×30 | ten draws each for Opus, Sonnet and Haiku, `--tier accelerated`, taken under the stall guard |
+| 2 | `tasks/metal_softmax_backward_kernel/meta.yaml` | `frozen_set: v2` and its first calibration block |
+| 3 | `tasks/metal_cross_entropy_kernel/meta.yaml` | the block rebuilt over twenty draws, and the `timeout` kept as a failure |
+| 4 | `README.md` | the new task row, twenty-nine entries, and the paragraph about the re-draw |
+| 5 | `docs/LESSONS.md` | L43 |
+| 6 | `docs/ROADMAP.md` | items 5 and 6 closed, §9.1 decided, §5's table updated |
+| 7 | `docs/sessions/15-…md` | the draws and the defect that was already published |
+| 8 | `CLAUDE.md` | the state block |
+| 9 | `COMMITS.md` | this block |
+
+After it: `python tools/check_calibration.py` reports **29 entries from 182
+draws**, `tools/check_cost.py` **182 files**, the harness suite **110 passed**.
+
+**Batch two, already committed and pushed** — the guard Selim chose in §9.2, and
+the four record files updated to say it landed:
 
 ```bash
 bash ~/scratchbench-session15-commits.sh
