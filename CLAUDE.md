@@ -253,17 +253,32 @@ set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
   `validate --tasks metal_softmax_backward_kernel` **six times out of six**
   clean, on the task that used to flap `BROKEN` and once took 2920 s. Harness
   suite **110 passed** (was 105). `ROADMAP.md` §9.2.
-- **Next thing to spend money on: §9 item 5**, the thirty draws for
-  `metal_softmax_backward_kernel` (~$2). Its trigger is met. Until it has a
-  calibration block the task is `unvalidated` and belongs to no set, so `v2`
-  membership waits on it. Then item 6, the `metal_cross_entropy_kernel`
-  re-draw. **§5's sweep is further off than one session**: §5's own
-  precondition table now says which five things are open.
-- Unchanged from session 14: fifteen tasks, **704** hidden tests, `v1` five,
-  `v2` three, `warmup` six, `unvalidated` one; laptop twelve, accelerated three.
-  `metal_softmax_backward_kernel` is still `frozen_set: unvalidated` and still
-  uncalibrated — for a different and now-known reason.
-- **Spend this session: $0.** No model was asked anything.
+- **Both Metal calibrations are done, and `unvalidated` is now empty.** Thirty
+  draws at `--tier accelerated` on 2026-09-04, ten per model, $3.87. Sixty
+  gradings, **no `timeout`, no `mps_stalled`, no `collection_error`** — the
+  guard's field evidence. `metal_softmax_backward_kernel` is **`v2`** by the
+  admission rule, not by hand: Opus **8/10**, Sonnet **6/10**, Haiku **2/10**,
+  and every frontier loss is a Metal compile error rather than a wrong answer.
+  Set counts are now **`v1` five, `v2` four, `warmup` six**.
+  `check_calibration.py` re-derives **29 entries from 182 draws**.
+- **The re-draw found a real defect in published evidence (L43).** Exactly one
+  of the 2026-08-13 `metal_cross_entropy_kernel` draws is a `timeout`, Haiku's,
+  in the denominator since then. **It is kept as a failure** — dropping a draw
+  after seeing which way it went is how a benchmark starts choosing its own
+  evidence, and that direction can only understate a model. The block is now 20
+  draws per model: Opus 14/20, Sonnet 12/20, Haiku 3/19. The lesson is not about
+  the stall: **a risk stated about data you already hold is not a risk, it is an
+  unread measurement.**
+- **§5's sweep is one task away, not one session.** §5 carries a precondition
+  table: the stall, both calibrations ✅; **laptop candidate 2**, §4, and a
+  rented CUDA box ⛔. **Selim chose §9.1 option A** — candidate 2 is written
+  against L28's mechanism, not §2.0's hazard — and it is the next
+  task-writing job and the whole of the remaining `v2` membership question.
+- Numbers from this session's runs: fifteen tasks, **704** hidden tests; harness
+  suite **110 passed**; `validate --tier all` 14 validated, 1 not checked here;
+  `check_cost.py` **182 file(s) checked**; `check_calibration.py` **29 entries
+  from 182 draw(s)**. Laptop twelve, accelerated three.
+- **Spend this session: $3.87**, thirty draws. Total spend to date about $14.
 
 ## State as of 2026-08-30, session 14 (verify before trusting)
 
