@@ -31,19 +31,39 @@ added: 2026-08-13
 # draw returned an API error and measured nothing, so it is in neither the
 # numerator nor the denominator.
 #
-# v2 is being assembled rather than published: this is its first member, and the
-# leaderboard carries no v2 row until the set is complete.
+# RE-DRAWN 2026-09-04, and the reason matters more than the new numbers.
+# Those first draws were taken on a machine where every other process that
+# touches torch.mps is blocked for its whole life, which nobody knew until
+# 2026-09-04 (docs/LESSONS.md L42). Under that fault a graded run could be killed
+# at time_limit_s and recorded `timeout` — evidence, and a failure — when nothing
+# had actually been measured about the model. It was not hypothetical here:
+# exactly one of the 2026-08-13 draws is a `timeout`, Haiku's, and it is counted
+# below as a failure. That is the conservative direction and it is kept rather
+# than quietly dropped: it can only understate a model, never flatter one, and
+# removing a draw after seeing which way it went is how a benchmark starts
+# choosing its own evidence.
+#
+# Thirty more draws were taken on 2026-09-04 with runner/mps_stall.py guarding
+# every graded process, ten per model. Not one of those sixty gradings produced a
+# `timeout`, an `mps_stalled` or a `collection_error`. The blocks below are the
+# two sets of draws added together, twenty per model, because that is what the
+# checked-in evidence sums to and a rate over twenty draws is worth more than two
+# rates over ten. Sonnet moved most: 4 of 10 before, 8 of 10 after, which is a
+# reminder that ten draws is a sample and L19 says so on the leaderboard.
+#
+# v2 is being assembled rather than published: the leaderboard carries no v2 row
+# until the set is complete.
 frozen_set: v2
 calibration:
   - model: claude-opus-5
-    draws: 10
-    passed: 8
-    date: 2026-08-13
+    draws: 20
+    passed: 14
+    date: 2026-09-04
   - model: claude-sonnet-5
-    draws: 10
-    passed: 4
-    date: 2026-08-13
+    draws: 20
+    passed: 12
+    date: 2026-09-04
   - model: claude-haiku-4-5
-    draws: 9
-    passed: 1
+    draws: 19
+    passed: 3
     date: 2026-08-13
