@@ -419,21 +419,22 @@ to prove the older schema still loads.
 **Preconditions.** `v2` has its full membership from sections 1 and 2, section 4
 has shipped, and a CUDA machine is available for the Triton member.
 
-**Where those stand, 2026-09-04.** The one that used to block everything is
-gone: §9.2's guard is in and the Metal tasks grade cleanly. Four things are
-still open, and none of them is work this machine can finish on its own:
+**Where those stand, 2026-09-04, end of session 15.** Three of the five are
+done. The two that remain are the two that cannot be finished by measuring
+harder:
 
 | Precondition | State |
 |---|---|
-| `metal_softmax_backward_kernel` calibrated | §9 item 5, trigger met, **ready to run, ~$2** — until it has a block it is `unvalidated` and belongs to no set |
-| `metal_cross_entropy_kernel` re-drawn | §9 item 6, its published draws predate the guard, ~$2 |
-| Laptop candidate 2 written | §9 item 1 and §9.1, **still an open A/B/C decision**, and `v2` has one laptop task until it is answered |
-| §4 shipped | cost-per-solved, failure shape by name, generated tables — not started |
-| A CUDA box | rented by the hour, for `fused_rmsnorm_kernel` only |
+| The stall | ✅ §9.2's guard is in; sixty gradings on 2026-09-04 produced no `timeout` and no `mps_stalled` |
+| `metal_softmax_backward_kernel` calibrated | ✅ §9 item 5. Opus 8/10, Sonnet 6/10, Haiku 2/10, admitted to `v2` by the rule |
+| `metal_cross_entropy_kernel` re-drawn | ✅ §9 item 6, and it found a real `timeout` in the published draws — `LESSONS.md` L43 |
+| Laptop candidate 2 written | ⛔ §9 item 1 and §9.1. **Selim chose option A on 2026-09-04**: written against L28's mechanism rather than §2.0's hazard. Not written yet, and it is the whole of the remaining `v2` membership question |
+| §4 shipped | ⛔ cost-per-solved, failure shape by name, generated tables — not started |
+| A CUDA box | ⛔ rented by the hour, for `fused_rmsnorm_kernel` only |
 
-So the sweep is not one session away, and the order is fixed by the table: the
-two calibrations first, because a sweep over a set whose membership is still
-being decided measures nothing that can be published.
+`v2` is four tasks and three of them are accelerated, so the laptop half of the
+sweep is one task until candidate 2 exists. That is the next session's work, and
+it is the last thing between here and a sweep worth publishing.
 
 ### 5.1 The hardware problem, stated plainly
 
@@ -623,10 +624,10 @@ writing.
 | 1 | 2026-08-29, §2.2 | **No laptop candidate passes the §2.0 gate**, and §9.1 below argues the gate may be the wrong instrument for this tier. The bank is exhausted (§1.3) and the replacement is a design question, not a writing task. Until it is answered, §1.2's reopening condition cannot advance and §5's `v2` sweep cannot start. This is the critical path. | §9.1, then a session of its own before §5 | $0 to decide, $3 to calibrate what it produces |
 | 2 | 2026-08-29, §2.1 | **`docs/PATTERNS.md` does not exist.** `CLAUDE.md`'s mandatory loading paragraph says to search it first for any bug. A rule pointing at a missing file trains the next session to skip the rule. Either write the file out of the L-entries that are really debugging patterns, or cut the clause. | §6.3, the claims audit | $0 |
 | 3 | 2026-08-30, §2.1. **Diagnosed 2026-09-04, §9.2** | 🔴 **Found, and it is not the task.** On this machine every other process that touches `torch.mps` is stalled for its whole life: a host-to-device-to-host round trip costs 0.47–0.72 ms in a healthy process and 232–776 ms in a stalled one, with no overlap over fourteen consecutive launches, and the workload behind it takes 0.070–0.089 s against 8.055–10.899 s. It needs no custom shader (plain `torch.softmax` reproduces it), no failing test, and no particular task — `metal_cross_entropy_kernel`, which is **already published**, measured 1.89 s, 48.76 s, 1.50 s on three consecutive reference runs. The GPU is not busy while it happens: a second process launched into a 75-second stall did 50 MPS softmaxes in 0.687 s. `recoveryCount` is 0, a ten-second gap does not help, a keeper process holding an MPS context open does not help, and 2599 stack samples of a stalled process are all in `-[_MTLCommandBuffer waitUntilCompleted]`. Full account and the reasoning error that hid it for two sessions: `LESSONS.md` **L42**. Re-derive with `python tools/check_mps_stall.py --launches 14`. ✅ **Closed 2026-09-04.** Selim chose option A and the guard is in `runner/mps_stall.py` and `runner/sandbox.py`; `validate --tasks metal_softmax_backward_kernel` is clean six times out of six where it used to flap, and the harness suite is 110 passed. §9.2 records what landed. | done | $0 |
-| 6 | 2026-09-04, §9.2 | 🟡 **`metal_cross_entropy_kernel`'s calibration was drawn on this machine while the stall was live and unknown.** Its published block therefore rests on draws that may contain `timeout` where the model actually produced a wrong answer. The rate survives that and the failure shape does not, which is the same argument that kept the backward task unpublished — applied, this time, to something already public. **Done when** the task has been re-drawn under whatever §9.2 chooses, or the leaderboard says in writing which draws predate the guard. | Immediately after §9.2 is decided, and before §6.3's claims audit signs anything | ~$2 to re-draw |
+| 6 | 2026-09-04, §9.2 | ✅ **Closed 2026-09-04, and the exposure was real.** Counting the checked-in draws before spending anything found exactly one `timeout` in the published `metal_cross_entropy_kernel` evidence, Haiku's, sitting in the denominator since 2026-08-13. It is **kept as a failure**: removing a draw after learning which way it went is how a benchmark starts choosing its own evidence, and a `timeout` scored as a failure can only understate a model. Ten fresh draws per model were taken under the guard and added, so the block is now 20 draws per model (opus 14/20, sonnet 12/20, haiku 3/19). `LESSONS.md` **L43** is the lesson, and it is not about the stall: a risk stated about data you already hold is not a risk, it is an unread measurement. | done | $1.31 spent |
 | 3b | 2026-08-30, §2.1 | **Fixed on the way past, keep the reasoning.** `mutate_metal_task.py` waited 1800 s per mutant, and the mutant that returns out-of-range lanes before a barrier — undefined behaviour in MSL — spent every second of it. It now reads the task's own `time_limit_s` from `meta.yaml` and calls a timeout `CAUGHT`, which is what `STATUSES` does. Separately its starter gate read a timeout as "fails cleanly", so a starter that never answered would have certified the tests; One consequence to keep in view: a mutant that is expected to SURVIVE and happens to be killed by the limit is reported CAUGHT, so while item 3 is open a `did not match` on a SURVIVES line has two possible readings and the printed `timed out after 300s` is what tells them apart. `TIMED_OUT = 124` is now distinct from a real failure and stops the run with its own message. | done | $0 |
 | 4 | 2026-08-29, §2.1 | **L32's title is one notch more general than its evidence.** "The race this hardware refuses to show me" reads as a fact about the device; the backward kernel shows the same race at its second scratch reuse, so the fact is about the distance between the read and the write instead. The entry's body already scoped itself to "on this machine, on this driver, today" and predicted the failure would be news, so this is a title and a cross-reference to L39, not a retraction. `leaderboard/README.md` does not publish the claim and needs no change. | §6.3, the claims audit | $0 |
-| 5 | 2026-09-02, §2.1 | 🟡 **The thirty draws for `metal_softmax_backward_kernel` are owed.** Decided by Selim on 2026-09-02: fix item 3 first, then calibrate — because a leaderboard reader who sees `timeout` concludes the task is broken, and would be right. **Trigger, restated 2026-09-04, and now met:** the old one — twenty consecutive starter runs under 5 s — was unreachable, because half of all launches stall whatever the task is (item 3, `LESSONS.md` L42). The trigger became "§9.2 decided and its fix landed", and it is: the guard is in, `validate` on this task is clean six times out of six. **This is the next thing to spend money on, and it is what `v2` membership waits for. Then:** `--repeat 10` for `claude-opus-5`, `claude-sonnet-5` and `claude-haiku-4-5` with `--tier accelerated` and `--keep`, copy the draws into `calibration/`, re-derive with `tools/check_calibration.py`, and let the admission rule decide between `v2` and `warmup` — do not decide it by hand. **Done when** `meta.yaml` carries the block, `frozen_set` is no longer `unvalidated`, and the draws are checked in. | Immediately after item 3 | ~$2 |
+| 5 | 2026-09-02, §2.1 | 🟡 **The thirty draws for `metal_softmax_backward_kernel` are owed.** Decided by Selim on 2026-09-02: fix item 3 first, then calibrate — because a leaderboard reader who sees `timeout` concludes the task is broken, and would be right. **Trigger, restated 2026-09-04, and now met:** the old one — twenty consecutive starter runs under 5 s — was unreachable, because half of all launches stall whatever the task is (item 3, `LESSONS.md` L42). The trigger became "§9.2 decided and its fix landed", and it is: the guard is in, `validate` on this task is clean six times out of six. ✅ **Closed 2026-09-04.** Ten draws per model at `--tier accelerated`, which collected item 6's re-draw in the same sweep. The admission rule decided rather than the author: the highest two rates are **80% and 60%**, so the frontier does not clear it and it is **`v2`**. Opus 8/10, Sonnet 6/10, Haiku 2/10; every one of Opus's and Sonnet's losses is a Metal compile error rather than a wrong answer, so the shape this task measures is the type and address-space rules around the shared scratch array, not the three reductions. Thirty draws are checked into `calibration/` and `tools/check_calibration.py` re-derives all 29 entries from 182 files. **`unvalidated` is now empty: `v1` five, `v2` four, `warmup` six.** | done | $2.56 spent |
 
 ### 9.1 The counterexample already in `v2`, and what it suggests for debt item 1
 
@@ -659,6 +660,9 @@ were all chosen against the wrong criterion for this tier".
 
 **The choice for the next task-writing session, stated so it can be answered in
 one word:**
+
+**Selim chose A on 2026-09-04.** §2.0 needs the sentence described at the end of
+this section, and candidate 2 is the next session's task-writing job.
 
 - **A — write candidate 2 against L28's mechanism instead of §2.0's hazard.**
   A laptop task whose graded unit is handed one piece of a decomposition the
