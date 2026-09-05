@@ -26,23 +26,38 @@ added: 2026-08-30
 # float64 CPU autograd gradient is 9.9e-8 and its worst absolute row sum is
 # 2.0e-7, against an ATOL of 2e-6.
 #
-# NOT CALIBRATED, AND DELIBERATELY NOT IN A NUMBERED SET.
-# This task has an instability that the forward Metal task does not, measured on
-# 2026-08-30 and not explained. A run of this suite in which many tests fail
-# enters, about half the time, a state where every MPS operation in that process
-# is roughly a hundred times slower for the life of the process — the untouched
-# starter has measured 1.0 s, 1.4 s, 33 s, 124 s, 278 s, 312 s, 344 s and 2920 s
-# on the same command and the same quiet machine, while the reference has
-# measured 1.2 s to 3.7 s every time and metal_cross_entropy_kernel's starter ran
-# 10 times out of 10 under 1.4 s. Ruled out by measurement: CPU starvation, the
-# largest shapes, autograd in the expected value, peak memory (a slow run used
-# *less*), the NaN sentinel, and a kernel that writes nothing.
+# This task shipped uncalibrated on 2026-08-30 and said here that it had an
+# instability the forward Metal task did not. That was wrong, and the correction
+# is worth more than the original claim: the stall belongs to the machine, not to
+# this task. On this M1 Pro every other process that touches torch.mps is blocked
+# for the whole of its life, whatever it is running — no custom shader and no
+# failing test required, and metal_cross_entropy_kernel is equally exposed.
+# docs/LESSONS.md L42 has the measurements and the reasoning error that hid it.
 #
-# Why that blocks the calibration rather than merely annoying: time_limit_s is
-# 300 s, so a wrong solution can be killed and recorded `timeout` instead of
-# `failed`. Both are evidence and both are failures, so a pass rate would still
-# be sound — but the failure shapes would not be, and the failure shapes are what
-# this repository publishes instead of partial credit. Paying for thirty draws to
-# collect shapes known to be unreliable is the kind of number this repository
-# exists to refuse. docs/ROADMAP.md section 9 item 3 carries it.
-frozen_set: unvalidated
+# runner/mps_stall.py now refuses to grade in such a process and relaunches, and
+# a run that never finds a healthy one is `mps_stalled` — no evidence — rather
+# than a `timeout` that would look like the solution's fault. The thirty draws
+# below were taken under that guard: sixty gradings, and not one `timeout`, one
+# `mps_stalled` or one `collection_error` among them.
+#
+# Calibrated on 2026-09-04, ten draws per model, and it earns a numbered set on
+# the rule in README: the highest two rates are 80% and 60%, so the frontier does
+# not clear it. Opus loses two draws of ten and Sonnet four, every one of them to
+# a Metal compile error rather than to a wrong answer — the failure shape this
+# task turns out to measure is that the three reductions are easy to write and
+# the type and address-space rules around the shared scratch array are not.
+# tools/check_calibration.py re-derives every line below from calibration/.
+frozen_set: v2
+calibration:
+  - model: claude-opus-5
+    draws: 10
+    passed: 8
+    date: 2026-09-04
+  - model: claude-sonnet-5
+    draws: 10
+    passed: 6
+    date: 2026-09-04
+  - model: claude-haiku-4-5
+    draws: 10
+    passed: 2
+    date: 2026-09-04
