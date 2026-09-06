@@ -1,0 +1,58 @@
+slug: chunked_batchnorm_backward
+version: 1
+category: training
+difficulty: 4
+probes: >
+  Whether the model recognises that the two correction terms in batch
+  normalisation's backward pass are sums over the whole batch, that a chunk
+  holds neither of them, and that they are the parameter gradients arriving one
+  pass early — the one thing a per-chunk implementation gets wrong while
+  returning gradients of the right shape and scale, and while being exactly
+  right whenever the caller happens to pass a single chunk.
+time_limit_s: 180
+tier: laptop
+requires_gpu: false
+deps: [torch]
+added: 2026-09-04
+# Written 2026-09-04 as laptop candidate 2, against docs/LESSONS.md L28's
+# mechanism rather than V2_DESIGN.md 2.0's hazard clause. Selim chose that on
+# 2026-09-04 in ROADMAP.md 9.1: 2.0 was derived from two accelerated tasks and
+# generalised to the laptop tier without a laptop example, and the laptop
+# example that exists — flash_attention_backward — discriminates without
+# satisfying 2.0 at all. The recipe is the one that task established: the graded
+# unit is handed one piece of a decomposition the caller chose, the correct
+# answer needs state that piece does not have, and holding the whole thing is
+# unavailable rather than discouraged.
+#
+# It is warmup, refused by the admission rule and not by hand: the top two rates
+# are 100% and 100%. The reason is worth more than the task and it is
+# docs/LESSONS.md L44. This reproduces L28's *shape* and not its content. The
+# whole-batch state the chunk is missing arrives as `dgamma`, `dbeta` and
+# `total_count`, three of this function's own arguments — so nothing has to be
+# reconstructed, and what is left is one line of algebra. In
+# flash_attention_backward the equivalent quantity is handed to nobody: the
+# solution has to recognise that rowsum(dO * O) is the row correction, and that
+# recognition is what Sonnet loses two draws of ten to. A decomposition the
+# caller chose is necessary for that mechanism and it is not sufficient.
+#
+# The failure shapes say the same thing. All eight of Haiku's losses fail
+# test_matches_autograd at chunk_sizes0, which is the *single chunk* case, so
+# they are not the chunked mistake this task was built around; they are ordinary
+# algebra, one draw dropping gamma from the scale correction and another summing
+# a pointwise term over the chunk. Only one of the eight also fails
+# split invariance. Opus and Sonnet both write the correction in a single line
+# straight out of the two arguments.
+frozen_set: warmup
+calibration:
+  - model: claude-opus-5
+    draws: 10
+    passed: 10
+    date: 2026-09-05
+  - model: claude-sonnet-5
+    draws: 10
+    passed: 10
+    date: 2026-09-05
+  - model: claude-haiku-4-5
+    draws: 10
+    passed: 2
+    date: 2026-09-05
