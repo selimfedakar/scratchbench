@@ -123,6 +123,23 @@ because it is not a topic — it is something a compiler tells you after you hav
 already written it wrong. The first is knowledge and the second is a hazard, and
 only hazards separate models that are all equally well read. `LESSONS.md` L37.
 
+**Scoped 2026-09-04: this is the accelerated tier's criterion. The laptop
+tier's is L28's mechanism.** 2.0 was derived from `fused_rmsnorm_kernel` and
+`metal_cross_entropy_kernel`, which are both accelerated, and generalised to the
+laptop tier without a laptop example in front of it. The laptop example exists:
+`flash_attention_backward` is the only task on that tier which separates one
+frontier model from another, it is in `v2`, and it satisfies 2.0 not at all —
+flash attention has papers, tutorials and reference implementations. What makes
+it hard is that the graded unit is handed one piece of a decomposition the
+*caller* chose, the correct answer needs state that piece does not have, and
+holding the whole thing is unavailable rather than discouraged. Applying 2.0's
+gate to the laptop tier refused three candidates in a row on the structural
+ground that numpy and torch are exhaustively documented, which is a fact about
+the tier's toolset and not about the tier (`ROADMAP.md` §1.3). One criterion was
+covering two tiers and only earned it on one of them. Selim's decision and the
+two rejected alternatives are `ROADMAP.md` §9.1; the first task written against
+the laptop criterion is `chunked_batchnorm_backward`.
+
 Mechanism density alone is not sufficient either — `online_softmax_attention` is
 difficulty 5, mechanism dense, and Opus 5 passed it first try. Four further
 properties separate frontier models where a single hard mechanism does not:
