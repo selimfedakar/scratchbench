@@ -15,7 +15,46 @@ shell cannot find the binary that was supposed to fail. `docs/LESSONS.md` L24.
 
 ## Pending
 
-### Session 15 — the stall was never the task's
+### Session 16 — laptop candidate 2, written and refused
+
+```bash
+bash ~/scratchbench-session16-commits.sh
+```
+
+43 commits: the task in the order it was written, thirty draws one file each,
+then the metadata and the record the draws license. **One push at the end**, no
+sleeps, nothing squashed.
+
+The order is a hard constraint in exactly one place, and it is the same one as
+last session: all thirty draws land before
+`tasks/chunked_batchnorm_backward/meta.yaml`, because `tools/check_calibration.py`
+runs in CI and re-derives every block from the files in `calibration/` and
+`leaderboard/`. A block that arrives before its evidence is a red build telling
+the truth. The four task files land before the draws for a different reason —
+`meta.yaml` is what makes the directory a task, so until it arrives the loader
+does not see the other four and CI cannot care what order they came in.
+
+| Group | Files | What |
+|---|---|---|
+| 1 | `tasks/chunked_batchnorm_backward/{reference,starter,hidden_tests,prompt.md}` ×4 | the task, in the order `CLAUDE.md` mandates |
+| 2 | `tools/mutate_v2_tasks.py` | sixteen mutants, fourteen caught and two expected to survive |
+| 3 | `calibration/*.json` ×30 | ten draws each for Opus, Sonnet and Haiku, laptop tier |
+| 4 | `tasks/chunked_batchnorm_backward/meta.yaml` | `frozen_set: warmup` and the calibration block the rule produced |
+| 5 | `README.md` | the new row, the fifth-task section, and three stale counts |
+| 6 | `docs/V2_DESIGN.md` | §2.0 scoped to the accelerated tier |
+| 7 | `docs/ROADMAP.md` | item 1 closed, item 7 opened, §9.3 written |
+| 8 | `docs/LESSONS.md` | L44 |
+| 9 | `docs/sessions/16-…md` | the journal |
+| 10 | `CLAUDE.md` | the state block |
+| 11 | `COMMITS.md` | this block |
+
+After it: `tools/check_calibration.py` reports **32 entries from 212 draws**,
+`tools/check_cost.py` **212 files**, `validate --tier all` **15 validated, 1 not
+checked here**, and the harness suite **110 passed**.
+
+### Session 15 — the stall was never the task's — ✅ all three batches ran
+
+
 
 ```bash
 bash ~/scratchbench-session15-commits.sh
