@@ -46,7 +46,7 @@ That single constraint is the whole design:
 - **Grading is objective.** Tests pass or they do not. No judge model, no rubric, no argument.
 - **A full sweep costs tens of dollars, not thousands** — so it can be re-run the day a new model ships, not six months later.
 
-Fifteen tasks and 704 hidden tests. Twelve of them run on any laptop and need
+Sixteen tasks and 748 hidden tests. Thirteen of them run on any laptop and need
 nothing but Python; the other three need a GPU, are reported beside the headline
 with the hardware each one wants, and are never folded into it.
 
@@ -189,6 +189,7 @@ See [`TASK_FORMAT.md`](TASK_FORMAT.md) for the full contract, and [`CONTRIBUTING
 | `quantization_error_bounds` | warmup | numerics | 4 | 65 | per-channel scales, clipping, the error you promised |
 | `online_softmax_attention` | v1 | attention | 5 | 57 | tiled attention with a running max and rescale |
 | `custom_autograd_double_backward` | warmup | training | 4 | 116 | a hand-written backward that is itself differentiable |
+| `chunked_batchnorm_backward` | warmup | training | 4 | 44 | a batch-coupled backward over micro-batches the caller chose |
 | `flash_attention_backward` | v2 | attention | 5 | 49 | a derived backward, and the row term that is not blockwise |
 | `fused_rmsnorm_kernel` ⚡ | v2 | kernels | 4 | 24 | a real Triton reduction, not a PyTorch one-liner |
 | `metal_cross_entropy_kernel` ⚡ | v2 | kernels | 4 | 68 | a Metal threadgroup reduction at a group size it does not choose |
@@ -224,7 +225,7 @@ That rule read *one* entry until 2026-08-17 — the single best model — and th
 
 All three were refused. Two of them deserved it: Opus and Sonnet both sweep them, and a task two frontier models clear has stopped measuring the frontier. The middle one did not. Sonnet loses two draws of ten to it, which makes it the only task on the laptop tier that separates one frontier model from another — and the rule threw it out on Opus's account, because it equated *the top of the field* with *the strongest model in it*. Reading the top two entries instead moves exactly one task in the whole repository, which is that one. The uncomfortable part — that a rule was rewritten after it refused something its author liked, and that an earlier journal had already decided the other way — is written up as `docs/LESSONS.md` L35 rather than smoothed over here.
 
-Every draw behind those numbers is checked in under [`calibration/`](calibration/) and [`leaderboard/`](leaderboard/), and `tools/check_calibration.py` re-derives all twenty-nine entries from them on every push. A figure that decides whether a task is allowed into a frozen set is not allowed to be the one figure nobody can reproduce.
+Every draw behind those numbers is checked in under [`calibration/`](calibration/) and [`leaderboard/`](leaderboard/), and `tools/check_calibration.py` re-derives all thirty-two entries from them on every push. A figure that decides whether a task is allowed into a frozen set is not allowed to be the one figure nobody can reproduce.
 
 **One of those figures was re-drawn on 2026-09-04, and why is worth a paragraph.** This repository is developed on an M1 Pro where every other process that touches `torch.mps` turns out to be blocked for the whole of its life — no custom shader and no failing test required, and nobody knew until it was measured. Under that fault a graded run could be killed at its time limit and recorded `timeout`: evidence, and a failure, when in fact nothing about the model had been measured. Exactly one draw in the published `metal_cross_entropy_kernel` evidence is such a `timeout`. It is still counted as a failure, because dropping a draw after seeing which way it went is how a benchmark starts choosing its own evidence, and because that direction can only understate a model rather than flatter one. Thirty fresh draws were taken with `runner/mps_stall.py` guarding every graded process — sixty gradings, no `timeout`, no `mps_stalled` — and the two Metal tasks now carry twenty and ten draws per model respectively. `docs/LESSONS.md` L42 and L43 are the account.
 
@@ -247,6 +248,14 @@ Sonnet's `2 failed, 47 passed` is the signature of a mutant written for this tas
 The refusal is not the interesting part. Haiku failed the *same seventeen tests of 116 in every one of ten draws*, and they are two test functions: the second-derivative ones. Everything else passed every time — forward, first-order gradients, broadcasting, return arity, the in-place detection. Ten draws out of ten saved the forward's sigmoid and reused it in the backward, where it arrives as a constant because a `Function`'s forward runs with differentiation switched off. That substitution is mutant three for this task, written before any model was asked; this is the second time a real model has reproduced one of them verbatim.
 
 And it sharpened the design rule. "The difficulty is an obscure fact about a tool" was too generous a sentence: PyTorch has a page about double backward in custom Functions, so every model at the top has read it. `half` being a type name in Metal Shading Language has no page, because it is not a topic — you learn it from a compiler. The question is now written down as *does the framework have a page about exactly this mistake?*, and it is answerable before spending anything on a calibration. `docs/LESSONS.md` L37.
+
+### The fifth task, and the half of the criterion that does the work
+
+`chunked_batchnorm_backward` (2026-09-04, 44 tests) is batch normalisation's backward pass over micro-batches the caller chose. It was written against the other criterion — the one the laptop tier's single discriminating task actually satisfies — where difficulty comes from the shape of the interface rather than from an obscure fact: the graded function is handed one micro-batch and never another, so the two correction sums it needs, which run over the whole batch, are not available to it. Opus 10/10, Sonnet 10/10, Haiku **2/10** — refused, `warmup`.
+
+The reason it failed to discriminate is worth more than the task, and it is a mistake in the criterion rather than in the code. The state the chunk was missing arrives as three of the function's own arguments, so nothing has to be reconstructed and one line of algebra is left. `flash_attention_backward` hands its block function the forward's output and the incoming gradient, and the difficulty is *recognising* that their row-wise dot product is the correction — a quantity nobody passes it. **A decomposition the caller chose is necessary and not sufficient; the whole-unit quantity has to be recovered, not received.**
+
+The failure shapes say it independently, and the pass rate cannot. All eight of Haiku's losses fail in the case where the batch is a *single* chunk, which is exactly where the chunked mistake is correct by construction — so not one of the eight is the mistake the task was built around. The task measured arithmetic care and never once measured the thing it is named after. `docs/LESSONS.md` L44.
 
 ### The first task the rule let in on its own numbers
 
@@ -287,7 +296,7 @@ So: **v1 is frozen and dated.** Every result records the task-set version and th
 - **One attempt per task.** A model that passes on the eleventh try is measuring the scaffolding, not the model. The number is written into every results file so nobody has to take it on trust. Repeated *independent* runs are a different thing from retries, and welcome.
 - **No sampling, thinking or effort knobs are set.** Every model is asked at its own defaults, deliberately: a score at one effort setting and a score at another are not comparable, and nothing in a results file would say so.
 - **No server-side fallbacks.** If the model that answers is not the model that was asked, the run raises rather than publishing one model's work under another's name.
-- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Thirty entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
+- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Forty-four entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
 - **A correctness benchmark cannot see a slow kernel.** `metal_cross_entropy_kernel` grades the answer, and a kernel that ignores its threadgroup entirely — one lane, a serial loop over the row, no reduction — passes all sixty-eight tests. The only assertion that would catch it is a wall-clock one, and those are banned here in every tier because timing on unknown hardware is not reproducible. The degenerate kernel is checked in as a mutant with `SURVIVES` as its expected verdict, so the hole is a re-runnable fact rather than a footnote, and all ten Opus draws wrote a real threadgroup reduction anyway. `docs/LESSONS.md` L33.
 
 ## What this repository does not contain
