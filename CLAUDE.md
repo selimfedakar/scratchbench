@@ -172,7 +172,7 @@ that the best model tried never fails is refused by the loader. See
 Every step of the build gets a short entry in `docs/sessions/NN-title.md`, in
 English, first person: what was done, why, which technology carries it, and
 what was verified with pasted output. Written as the step finishes, not
-retrospectively. 00 through 13 exist; the next one is 14.
+retrospectively. 00 through 16 exist; the next one is 17.
 
 `docs/LESSONS.md` is the other half and it is **mandatory, every session**:
 what I got wrong, in my own voice, newest first. Not a changelog — the entries
@@ -213,6 +213,58 @@ computed over. `accelerated` may set `requires_gpu: true` and must declare
 folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
+
+## State as of 2026-09-05, session 16 (verify before trusting)
+
+- **Laptop candidate 2 exists, is calibrated, and is `warmup`.**
+  `chunked_batchnorm_backward` (training, laptop, torch, **44 hidden tests**):
+  batch normalisation's backward pass over micro-batches the caller chose, with
+  padding. L2 on both halves — `44 passed  44 failed  ok` — and sixteen mutants,
+  fourteen caught and two surviving, all matching their expected verdicts. Ten
+  draws per model on 2026-09-05: `claude-opus-5` **10/10**, `claude-sonnet-5`
+  **10/10**, `claude-haiku-4-5` **2/10**, $1.7124. The admission rule refused it
+  because the top two rates are both 100%.
+- **The refusal has a cause and it is the session's headline, `LESSONS.md` L44.**
+  The task reproduces L28's *shape* and not its content. The whole-batch state
+  the chunk is missing — the two correction sums and the count — arrives as three
+  of `chunk_input_gradients`'s own arguments, so nothing has to be reconstructed
+  and what is left is one algebra step. Opus wrote it as one line:
+  `dx = gamma_b * inv_std * (dy_masked - (dbeta_b + x_hat * dgamma_b) / n)`.
+  `flash_attention_backward` hands its block function `o` and `do` and the
+  difficulty is *recognising* that `rowsum(dO * O)` is the row correction; I
+  passed the correction itself. **A decomposition the caller chose is necessary
+  and not sufficient.**
+- **The failure shapes say it independently.** All eight of Haiku's losses fail
+  `test_matches_autograd[chunk_sizes0]`, the **single chunk** case, where the
+  chunked mistake is correct by construction — so not one of the eight is the
+  mistake the task was built around. One draw dropped `gamma` from the scale
+  correction; one summed a pointwise term over the chunk and was the only one to
+  fail split invariance. The count `2/10` says none of that (L27).
+- **`V2_DESIGN.md` §2.0 is now scoped**, which is what §9.1 asked for: the hazard
+  question is the **accelerated** tier's criterion, L28's mechanism is the
+  **laptop** tier's, and §1.3's three refusals are a fact about numpy and torch
+  being exhaustively documented rather than about the tier.
+- **`ROADMAP.md` §9.3 is the new critical path** (debt item 7): the laptop
+  criterion with **both** halves, the one-sentence check that would have caught
+  this before any money was spent — *name the quantity the graded unit cannot
+  compute, then look for it in the argument list* — and candidate 3,
+  `chunked_batchnorm_reduction`, where the chunk returns a reduction buffer whose
+  contents are its own choice and no signature names the sums the answer needs.
+- **§2.3's branch is deliberately not taken.** Two laptop candidates have now
+  cleared the admission rule, which is its stated reopening condition, and it is
+  held open because attempt two never carried the property it was written to
+  isolate. That distinction is written down in §2.3 and §9.3 rather than assumed,
+  because L35 is about an argument standing in for a measurement.
+- Numbers from this session's runs: harness suite **110 passed**;
+  `validate --tier all` **15 task(s) validated, 1 not checked here**;
+  `mutate_v2_tasks.py --task chunked_batchnorm_backward` **all 16 mutants behaved
+  as expected**; `check_cost.py` **212 file(s) checked**; `check_calibration.py`
+  **32 entries re-derived from 212 draw(s)**. Sixteen tasks, **748** hidden
+  tests. Set counts: `v1` five, `v2` four, `warmup` **seven**, `unvalidated`
+  empty. Tiers: laptop thirteen, accelerated three.
+- **Spend this session: $1.7124**, thirty draws. Total spend to date about $16.
+- **Still open.** `v2` is unchanged at four members with one laptop task, so §5's
+  sweep still has a laptop half of one. §4 and a rented CUDA box are untouched.
 
 ## State as of 2026-09-04, session 15 (verify before trusting)
 
