@@ -163,6 +163,165 @@ TASKS: dict[str, tuple[str, list[tuple[str, ...]]]] = {
             ),
         ],
     ),
+    "chunked_batchnorm_backward": (
+        "chunked_batchnorm.py",
+        [
+            (
+                "corrections over this chunk only",
+                "averages the two whole-batch sums over the chunk in hand instead",
+                "    correction = (dbeta[None, :, None] + x_hat * dgamma[None, :, None]) / total_count",
+                """    chunk_dgamma, chunk_dbeta = chunk_parameter_gradients(
+        x_chunk, dy_chunk, mask_chunk, mean, var, eps
+    )
+    correction = (
+        chunk_dbeta[None, :, None] + x_hat * chunk_dgamma[None, :, None]
+    ) / int(mask_chunk.sum())""",
+            ),
+            (
+                "no correction at all",
+                "differentiates as though the statistics were constants",
+                "    return scale * (dy - correction) * keep",
+                "    return scale * dy * keep",
+            ),
+            (
+                "the shift correction only",
+                "subtracts the mean of the upstream gradient and forgets what it correlates with",
+                "    correction = (dbeta[None, :, None] + x_hat * dgamma[None, :, None]) / total_count",
+                "    correction = dbeta[None, :, None] / total_count",
+            ),
+            (
+                "the scale correction only",
+                "keeps the term through the variance and drops the one through the mean",
+                "    correction = (dbeta[None, :, None] + x_hat * dgamma[None, :, None]) / total_count",
+                "    correction = x_hat * dgamma[None, :, None] / total_count",
+            ),
+            (
+                "one pass over the chunks",
+                "writes each input gradient as it goes, against the totals so far",
+                """    dgamma = torch.zeros_like(gamma)
+    dbeta = torch.zeros_like(gamma)
+    for x_chunk, dy_chunk, mask_chunk in zip(x_chunks, dy_chunks, mask_chunks):
+        chunk_dgamma, chunk_dbeta = chunk_parameter_gradients(
+            x_chunk, dy_chunk, mask_chunk, mean, var, eps
+        )
+        dgamma = dgamma + chunk_dgamma
+        dbeta = dbeta + chunk_dbeta
+
+    dx_chunks = [
+        chunk_input_gradients(
+            x_chunk,
+            dy_chunk,
+            mask_chunk,
+            mean,
+            var,
+            gamma,
+            eps,
+            dgamma,
+            dbeta,
+            total_count,
+        )
+        for x_chunk, dy_chunk, mask_chunk in zip(x_chunks, dy_chunks, mask_chunks)
+    ]""",
+                """    dgamma = torch.zeros_like(gamma)
+    dbeta = torch.zeros_like(gamma)
+    dx_chunks = []
+    for x_chunk, dy_chunk, mask_chunk in zip(x_chunks, dy_chunks, mask_chunks):
+        chunk_dgamma, chunk_dbeta = chunk_parameter_gradients(
+            x_chunk, dy_chunk, mask_chunk, mean, var, eps
+        )
+        dgamma = dgamma + chunk_dgamma
+        dbeta = dbeta + chunk_dbeta
+        dx_chunks.append(
+            chunk_input_gradients(
+                x_chunk,
+                dy_chunk,
+                mask_chunk,
+                mean,
+                var,
+                gamma,
+                eps,
+                dgamma,
+                dbeta,
+                total_count,
+            )
+        )""",
+            ),
+            (
+                "every position counted",
+                "counts the padded positions the statistics were never taken over",
+                "    total_count = sum(int(mask_chunk.sum()) for mask_chunk in mask_chunks)",
+                "    total_count = sum(mask_chunk.numel() for mask_chunk in mask_chunks)",
+            ),
+            (
+                "one fewer than the count",
+                "divides by the denominator an unbiased variance would have used",
+                "    correction = (dbeta[None, :, None] + x_hat * dgamma[None, :, None]) / total_count",
+                "    correction = (dbeta[None, :, None] + x_hat * dgamma[None, :, None]) / (total_count - 1)",
+            ),
+            (
+                "padding left in the result",
+                "masks the upstream gradient and not the answer, so the correction leaks into padding",
+                "    return scale * (dy - correction) * keep",
+                "    return scale * (dy - correction)",
+            ),
+            (
+                "padding left in the parameter gradients",
+                "sums the upstream gradient over positions that were never normalised",
+                """    dy = dy_chunk * keep
+    return (dy * x_hat).sum(dim=(0, 2)), dy.sum(dim=(0, 2))""",
+                """    dy = dy_chunk
+    return (dy * x_hat).sum(dim=(0, 2)), dy.sum(dim=(0, 2))""",
+            ),
+            (
+                "epsilon outside the square root when standardising",
+                "adds it to the standard deviation rather than to the variance",
+                "    return deviation / torch.sqrt(var + eps)[None, :, None] * keep, keep",
+                "    return deviation / (torch.sqrt(var) + eps)[None, :, None] * keep, keep",
+            ),
+            (
+                "epsilon outside the square root in the scale",
+                "the same omission where the input gradient is scaled",
+                "    scale = (gamma / torch.sqrt(var + eps))[None, :, None]",
+                "    scale = (gamma / (torch.sqrt(var) + eps))[None, :, None]",
+            ),
+            (
+                "scale gradient against the raw deviation",
+                "correlates the upstream gradient with x - mean instead of the standardised input",
+                "    return (dy * x_hat).sum(dim=(0, 2)), dy.sum(dim=(0, 2))",
+                "    return (dy * (x_chunk - mean[None, :, None])).sum(dim=(0, 2)), dy.sum(dim=(0, 2))",
+            ),
+            (
+                "parameter gradients the other way round",
+                "returns the shift first and the scale second",
+                "    return (dy * x_hat).sum(dim=(0, 2)), dy.sum(dim=(0, 2))",
+                "    return dy.sum(dim=(0, 2)), (dy * x_hat).sum(dim=(0, 2))",
+            ),
+            (
+                "scale left out of the input gradient",
+                "normalises the gradient without carrying gamma through it",
+                "    scale = (gamma / torch.sqrt(var + eps))[None, :, None]",
+                "    scale = (torch.ones_like(gamma) / torch.sqrt(var + eps))[None, :, None]",
+            ),
+            (
+                "standardised input left unmasked",
+                "the mask that the trailing one already makes redundant",
+                "SURVIVES",
+                "    return deviation / torch.sqrt(var + eps)[None, :, None] * keep, keep",
+                "    return deviation / torch.sqrt(var + eps)[None, :, None], keep",
+            ),
+            (
+                "upstream gradient left unmasked in the input gradient",
+                "the same redundancy on the other side of the same trailing mask",
+                "SURVIVES",
+                """    dy = dy_chunk * keep
+
+    # The two whole-batch averages. Computing them from this chunk's own""",
+                """    dy = dy_chunk
+
+    # The two whole-batch averages. Computing them from this chunk's own""",
+            ),
+        ],
+    ),
     "activation_checkpointing_rng": (
         "checkpointed_mlp.py",
         [
