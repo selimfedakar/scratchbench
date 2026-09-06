@@ -13,6 +13,77 @@ Newest first.
 
 ---
 
+## L44 — I copied the shape of the mechanism and handed over its content
+
+**What I expected.** Selim chose option A in `ROADMAP.md` §9.1: laptop candidate
+2 gets written against L28's mechanism rather than §2.0's hazard. I wrote the
+mechanism down before I designed anything, in the restart file's own words — the
+graded unit is handed one piece of a decomposition the *caller* chose, the
+correct answer needs state that piece does not have, and materialising the whole
+is unavailable rather than discouraged. `chunked_batchnorm_backward` satisfies
+every clause of that sentence. Batch normalisation's backward pass needs two
+sums over the whole batch, a micro-batch holds neither, and no function in the
+task ever sees a second chunk. I expected it to behave like
+`flash_attention_backward`.
+
+**What happened.** Thirty draws, and the top of the field never noticed there
+was a problem. `claude-opus-5` 10/10, `claude-sonnet-5` 10/10, `claude-haiku-4-5`
+2/10. The admission rule refused it and it is `warmup`. Opus wrote the whole of
+the supposed difficulty as one line:
+
+```python
+dx = gamma_b * inv_std * (dy_masked - (dbeta_b + x_hat * dgamma_b) / n)
+```
+
+`dgamma_b`, `dbeta_b` and `n` are `dgamma`, `dbeta` and `total_count`: three of
+the function's own arguments. **The state the chunk was missing arrives in the
+signature.** There is nothing to reconstruct, so what is left is an algebra step,
+and an algebra step is not a discriminator.
+
+**Where I went wrong, and I had the tell in front of me.** While choosing the
+API I rejected a variant on the grounds that it "gives away half of the L28
+insight", and then justified the one I kept by an analogy that does not hold:
+flash attention hands the block function `o` and `do`, so handing this one
+`dgamma` and `dbeta` looked like the same move. It is not the same move. `o` and
+`do` are forward artefacts, and the whole difficulty of that task is
+*recognising* that the row correction it needs is `rowsum(dO * O)` — a quantity
+nobody passes it, that has to be derived from the two things it happens to
+already hold. I passed the correction itself. The distance between those two
+designs is the entire task.
+
+So the mechanism has two halves and I implemented one. A decomposition the
+caller chose is **necessary**: it makes materialisation unavailable. It is not
+**sufficient**: what discriminates is that a whole-row quantity has to be
+recovered from artefacts that were kept for another reason. Handing it over as a
+parameter converts a derivation into an exercise in reading a signature, which
+is the thing frontier models are furthest ahead at.
+
+**What the failure shapes say, and they say it independently.** All eight of
+Haiku's losses fail `test_matches_autograd[chunk_sizes0]` — the case where the
+batch is a *single* chunk. The mistake this task was built to catch is by
+construction correct there. So not one of the eight failures is the chunked
+mistake: one draw drops `gamma` from the scale correction, another sums a
+pointwise term over the chunk, and the rest are ordinary algebra. Only one of the
+eight also fails split invariance. **The task measured arithmetic care and never
+once measured the thing it was named after** — and reading the count, 2/10, would
+have told me none of that. This is L27 again, one project over: a rate is not a
+shape.
+
+**What changed.** The task ships as it is: `warmup`, calibrated, its thirty
+draws checked in. It is a real measurement of a real task and it separates Haiku
+cleanly; deleting it after seeing which way it went is the move L43 exists about.
+`V2_DESIGN.md` §2.0 gains the scoping sentence §9.1 asked for, and `ROADMAP.md`
+§9.3 carries the criterion with **both** halves stated, plus candidate 3 designed
+against it: the chunk returns a reduction buffer whose contents are its own
+choice, the caller sums it, and nothing in any signature says which two sums the
+answer needs.
+
+**What it cost.** $1.71 and a session, for a `warmup` task and a criterion that
+is now written down correctly. The cheap check I skipped is a sentence long, and
+it is now the first question §9.3 asks of any candidate: **name the quantity the
+graded unit cannot compute, then find it in the argument list. If it is there,
+there is no task.**
+
 ## L43 — I wrote the exposure into the ledger and did not check whether it had already happened
 
 **What I expected.** L42 ended with a consequence I recorded as a risk:
