@@ -274,6 +274,14 @@ So the open item is not "write the next task", it is **"find a laptop candidate
 that passes the gate"**, and that is a design question with a decision attached
 to it. It is item 1 of the debt ledger in section 9.
 
+**Written on 2026-09-04, calibrated on 2026-09-05, and refused.** The decision
+was §9.1 option A, so candidate 2 came off no bank: `chunked_batchnorm_backward`,
+batch normalisation's backward pass over micro-batches the caller chose. It is
+L2 on both halves, sixteen mutants behaved as expected, and the admission rule
+put it in `warmup` at Opus 10/10, Sonnet 10/10, Haiku 2/10. The refusal is the
+rule working. What is worth carrying forward is *why*, and it is in §9.3 and
+`LESSONS.md` L44 rather than here.
+
 ### 2.3 The branch
 
 If both laptop candidates cleared the admission rule, stop and reopen section
@@ -282,6 +290,17 @@ evidence about the tier, not about the tasks, and it is the condition under
 which option B stops being a shortcut and becomes the honest description of what
 this benchmark now measures. Write it up in `LESSONS.md` before changing
 anything.
+
+**Both have now cleared it, and the branch is deliberately not taken.** The
+sentence above says the failure of two attempts is evidence about the tier
+"not about the tasks" — and that only holds when each attempt actually carried
+the property it was written to isolate. Candidate 2 did not: the whole-batch
+state its graded unit was supposed to be missing was one of its arguments, so it
+measured arithmetic care rather than the mechanism, and Haiku's eight losses fail
+even in the single-chunk case that the mechanism is by construction correct in.
+The reasoning is in §9.3 and the entry `LESSONS.md` L44 asks for is written. The
+branch is held open for candidate 3, which is the second attempt this condition
+was actually about.
 
 **Done when.** Both tasks L2 on both halves, mutants checked in with expected
 verdicts, both calibrated with the draws committed, journal written.
@@ -419,22 +438,20 @@ to prove the older schema still loads.
 **Preconditions.** `v2` has its full membership from sections 1 and 2, section 4
 has shipped, and a CUDA machine is available for the Triton member.
 
-**Where those stand, 2026-09-04, end of session 15.** Three of the five are
-done. The two that remain are the two that cannot be finished by measuring
-harder:
+**Where those stand, 2026-09-05, end of session 16.**
 
 | Precondition | State |
 |---|---|
 | The stall | ✅ §9.2's guard is in; sixty gradings on 2026-09-04 produced no `timeout` and no `mps_stalled` |
 | `metal_softmax_backward_kernel` calibrated | ✅ §9 item 5. Opus 8/10, Sonnet 6/10, Haiku 2/10, admitted to `v2` by the rule |
 | `metal_cross_entropy_kernel` re-drawn | ✅ §9 item 6, and it found a real `timeout` in the published draws — `LESSONS.md` L43 |
-| Laptop candidate 2 written | ⛔ §9 item 1 and §9.1. **Selim chose option A on 2026-09-04**: written against L28's mechanism rather than §2.0's hazard. Not written yet, and it is the whole of the remaining `v2` membership question |
+| A discriminating laptop task | ⛔ **written, calibrated, and refused.** `chunked_batchnorm_backward` was written against option A on 2026-09-04 and is `warmup`: Opus 10/10, Sonnet 10/10, Haiku 2/10. It reproduces L28's shape and not its content — the whole-batch state the chunk is missing arrives in the chunk function's own signature — so the recipe stands and the task did not implement it. `LESSONS.md` **L44**, §9.3, and candidate 3 |
 | §4 shipped | ⛔ cost-per-solved, failure shape by name, generated tables — not started |
 | A CUDA box | ⛔ rented by the hour, for `fused_rmsnorm_kernel` only |
 
 `v2` is four tasks and three of them are accelerated, so the laptop half of the
-sweep is one task until candidate 2 exists. That is the next session's work, and
-it is the last thing between here and a sweep worth publishing.
+sweep is still one task. §9.3 is the next session's work and it is the last thing
+between here and a sweep worth publishing.
 
 ### 5.1 The hardware problem, stated plainly
 
@@ -621,7 +638,8 @@ writing.
 
 | # | Found | What | Where it belongs | Cost |
 |---|---|---|---|---|
-| 1 | 2026-08-29, §2.2 | **No laptop candidate passes the §2.0 gate**, and §9.1 below argues the gate may be the wrong instrument for this tier. The bank is exhausted (§1.3) and the replacement is a design question, not a writing task. Until it is answered, §1.2's reopening condition cannot advance and §5's `v2` sweep cannot start. This is the critical path. | §9.1, then a session of its own before §5 | $0 to decide, $3 to calibrate what it produces |
+| 1 | 2026-08-29, §2.2 | **No laptop candidate passes the §2.0 gate**, and §9.1 below argues the gate may be the wrong instrument for this tier. The bank is exhausted (§1.3) and the replacement is a design question, not a writing task. ✅ **Answered 2026-09-04** — Selim chose option A — **and executed 2026-09-05**, which is how the answer turned out to be half of one. `V2_DESIGN.md` §2.0 is now scoped to the accelerated tier, the laptop criterion is L28's mechanism, and the first task written against it, `chunked_batchnorm_backward`, is `warmup` at Opus 10/10 and Sonnet 10/10. The criterion was stated with one of its two halves missing; §9.3 states both and carries candidate 3. `LESSONS.md` **L44**. | done; the remainder is item 7 | $1.71 spent |
+| 7 | 2026-09-05, §9.1 | 🔴 **The laptop criterion needs its second half tested, and that is a task.** A decomposition the caller chose makes materialisation unavailable, which is necessary and not sufficient; what discriminates is a whole-row quantity that has to be *recovered* from artefacts kept for another reason. Candidate 3 in §9.3 is designed against both halves. This is the critical path: until a laptop task discriminates, §5's sweep has one laptop member and §1.2's branch cannot be read honestly. | §9.3, the next session | $0 to design, ~$2 to calibrate |
 | 2 | 2026-08-29, §2.1 | **`docs/PATTERNS.md` does not exist.** `CLAUDE.md`'s mandatory loading paragraph says to search it first for any bug. A rule pointing at a missing file trains the next session to skip the rule. Either write the file out of the L-entries that are really debugging patterns, or cut the clause. | §6.3, the claims audit | $0 |
 | 3 | 2026-08-30, §2.1. **Diagnosed 2026-09-04, §9.2** | 🔴 **Found, and it is not the task.** On this machine every other process that touches `torch.mps` is stalled for its whole life: a host-to-device-to-host round trip costs 0.47–0.72 ms in a healthy process and 232–776 ms in a stalled one, with no overlap over fourteen consecutive launches, and the workload behind it takes 0.070–0.089 s against 8.055–10.899 s. It needs no custom shader (plain `torch.softmax` reproduces it), no failing test, and no particular task — `metal_cross_entropy_kernel`, which is **already published**, measured 1.89 s, 48.76 s, 1.50 s on three consecutive reference runs. The GPU is not busy while it happens: a second process launched into a 75-second stall did 50 MPS softmaxes in 0.687 s. `recoveryCount` is 0, a ten-second gap does not help, a keeper process holding an MPS context open does not help, and 2599 stack samples of a stalled process are all in `-[_MTLCommandBuffer waitUntilCompleted]`. Full account and the reasoning error that hid it for two sessions: `LESSONS.md` **L42**. Re-derive with `python tools/check_mps_stall.py --launches 14`. ✅ **Closed 2026-09-04.** Selim chose option A and the guard is in `runner/mps_stall.py` and `runner/sandbox.py`; `validate --tasks metal_softmax_backward_kernel` is clean six times out of six where it used to flap, and the harness suite is 110 passed. §9.2 records what landed. | done | $0 |
 | 6 | 2026-09-04, §9.2 | ✅ **Closed 2026-09-04, and the exposure was real.** Counting the checked-in draws before spending anything found exactly one `timeout` in the published `metal_cross_entropy_kernel` evidence, Haiku's, sitting in the denominator since 2026-08-13. It is **kept as a failure**: removing a draw after learning which way it went is how a benchmark starts choosing its own evidence, and a `timeout` scored as a failure can only understate a model. Ten fresh draws per model were taken under the guard and added, so the block is now 20 draws per model (opus 14/20, sonnet 12/20, haiku 3/19). `LESSONS.md` **L43** is the lesson, and it is not about the stall: a risk stated about data you already hold is not a risk, it is an unread measurement. | done | $1.31 spent |
@@ -663,6 +681,13 @@ one word:**
 
 **Selim chose A on 2026-09-04.** §2.0 needs the sentence described at the end of
 this section, and candidate 2 is the next session's task-writing job.
+
+⚠ **Read §9.3 with this.** A was executed on 2026-09-05 and the sentence is in
+`V2_DESIGN.md`, but the task it produced — `chunked_batchnorm_backward` — is
+`warmup` at Opus 10/10 and Sonnet 10/10. The recipe as stated below is missing
+its discriminating half: the whole-unit quantity must be *recovered* from
+artefacts kept for another reason, not passed in as an argument. §9.3 has both
+halves and `LESSONS.md` L44 has the reasoning error.
 
 - **A — write candidate 2 against L28's mechanism instead of §2.0's hazard.**
   A laptop task whose graded unit is handed one piece of a decomposition the
@@ -725,3 +750,70 @@ credit. Both Metal tasks are exposed, one of them already public (debt item 6).
 
 Whichever is chosen, `docs/LESSONS.md` L42 and this section are the record of
 why the numbers before the change and after it are not the same measurement.
+
+### 9.3 The laptop criterion, with both halves — and candidate 3
+
+Written 2026-09-05, after option A's first task was refused by the admission
+rule at Opus 10/10 and Sonnet 10/10.
+
+**What §9.1 got right.** `flash_attention_backward` is the only laptop task here
+that separates two frontier models, and what it turns on is not an obscure fact
+about a tool. Option A stands.
+
+**What it left out, and it is the half that does the work.** §9.1 described the
+mechanism as *the graded unit is handed one piece of a decomposition the caller
+chose, the correct answer needs state that piece does not have, and materialising
+the whole is unavailable.* Every clause of that is true of
+`chunked_batchnorm_backward` and it discriminates nothing, because the state the
+chunk does not have is passed to it as three arguments. The criterion has two
+halves and only the first was written down:
+
+1. **The decomposition is the caller's.** The graded unit sees one piece and
+   cannot obtain another. This makes materialisation unavailable rather than
+   detectable, which is what L28 is about. *Necessary.*
+2. **The whole-unit quantity has to be recovered, not received.** It is
+   reconstructible only through an identity over artefacts the caller kept for a
+   different reason — `rowsum(dO * O)` out of `o` and `do` — and recognising that
+   identity is the task. *This is the discriminating half.*
+
+**The check, and it costs a sentence.** Name the quantity the graded unit cannot
+compute from what it holds. Then look for it in the argument list. If it is
+there, or one arithmetic step from something that is, there is no task. Run this
+before writing a line, the way §2.0's question is run before writing a line.
+
+**Candidate 3 — `chunked_batchnorm_reduction`.** The same layer, the same
+decomposition, and the second half restored by deleting arguments rather than by
+adding mechanism:
+
+```python
+def chunk_reduction(x_chunk, dy_chunk, mask_chunk, mean, var, eps) -> Tensor
+def chunk_input_gradients(x_chunk, dy_chunk, mask_chunk, mean, var, gamma, eps,
+                          reduction_total) -> Tensor
+```
+
+`chunk_reduction` returns a `(rows, channels)` buffer whose *contents are the
+solution's own choice*; the caller sums those buffers across every chunk and
+hands the total back. Nothing in either signature says which quantities the
+answer needs, how many there are, or that the count of kept positions is one of
+them — and it is, since `total_count` is gone too. The solution has to derive
+that `dx` needs exactly the batch sums of `dy` and of `dy * xhat` and the size of
+the batch, and then design a buffer that carries all three. Both halves are
+present: the chunk still cannot see another chunk, and the missing state is now
+recovered rather than received.
+
+Two things to be honest about before spending anything. The protocol does tell
+the solution that the missing state is *additive across chunks*, which
+`flash_attention_backward` tells nobody; that is a smaller hint than the one L44
+is about, and it is the price of a laptop tier with no second axis to hide the
+reduction on. And the risk is unchanged and stated in advance: if the frontier
+clears this too, that is the **second** measured attempt against the laptop
+criterion as now written, and §1.2's branch has to be read.
+
+**Why §1.2 is not reopened today.** §2.3 says two laptop candidates clearing the
+admission rule reopens the tier question, and two have now cleared it. It is not
+read as met, and the reason is a measurement rather than a preference: attempt
+two did not test the criterion it was written against. L35 is the entry that
+warns about an argument standing in for a measurement, so the distinction has to
+be stated rather than assumed — `chunked_batchnorm_backward` is evidence that
+*that task* is easy, and it is not evidence about the tier, because the property
+it was supposed to isolate was never in it. Candidate 3 is that measurement.
