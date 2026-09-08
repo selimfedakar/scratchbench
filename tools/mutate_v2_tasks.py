@@ -163,6 +163,118 @@ TASKS: dict[str, tuple[str, list[tuple[str, ...]]]] = {
             ),
         ],
     ),
+    "chunked_batchnorm_reduction": (
+        "batchnorm_reduction.py",
+        [
+            (
+                "scale gradient centred on nothing",
+                "reduces sum(dy * x) and then forgets that xhat is not x",
+                "    dgamma = (reduction_total[SUM_DYX] - mean * dbeta) * inv_std",
+                "    dgamma = reduction_total[SUM_DYX] * inv_std",
+            ),
+            (
+                "the affine correction without the scale",
+                "centres the scale gradient and leaves it undivided by the deviation",
+                "    dgamma = (reduction_total[SUM_DYX] - mean * dbeta) * inv_std",
+                "    dgamma = reduction_total[SUM_DYX] - mean * dbeta",
+            ),
+            (
+                "variance as the raw second moment",
+                "forgets that the second moment is about zero and the variance is about the mean",
+                "    variance = reduction_total[SUM_XX] / count - mean * mean",
+                "    variance = reduction_total[SUM_XX] / count",
+            ),
+            (
+                "corrections over this chunk only",
+                "reduces the chunk again rather than using the total it was handed",
+                "    count, mean, inv_std, dgamma, dbeta = _unpack(reduction_total, eps)",
+                """    count, mean, inv_std, dgamma, dbeta = _unpack(
+        chunk_reduction(x_chunk, dy_chunk, mask_chunk), eps
+    )""",
+            ),
+            (
+                "no correction at all",
+                "differentiates as though the statistics were constants",
+                "    return (gamma * inv_std)[None, :, None] * (dy - correction) * keep",
+                "    return (gamma * inv_std)[None, :, None] * dy * keep",
+            ),
+            (
+                "the shift correction only",
+                "subtracts the mean of the upstream gradient and forgets what it correlates with",
+                """    correction = (dbeta[None, :, None] + x_hat * dgamma[None, :, None]) / count[
+        None, :, None
+    ]""",
+                "    correction = dbeta[None, :, None] / count[None, :, None]",
+            ),
+            (
+                "the scale correction only",
+                "keeps the term through the variance and drops the one through the mean",
+                """    correction = (dbeta[None, :, None] + x_hat * dgamma[None, :, None]) / count[
+        None, :, None
+    ]""",
+                "    correction = x_hat * dgamma[None, :, None] / count[None, :, None]",
+            ),
+            (
+                "every position counted",
+                "reduces the mask's size instead of the mask, so padding enters the denominators",
+                "            keep.expand_as(x_chunk).sum(dim=(0, 2)),",
+                "            torch.full((x_chunk.shape[1],), float(mask_chunk.numel()), dtype=x_chunk.dtype),",
+            ),
+            (
+                "one fewer than the count",
+                "divides by the denominator an unbiased variance would have used",
+                "    variance = reduction_total[SUM_XX] / count - mean * mean",
+                "    variance = reduction_total[SUM_XX] / (count - 1) - mean * mean",
+            ),
+            (
+                "padding left in the result",
+                "masks the upstream gradient and not the answer, so the correction leaks into padding",
+                "    return (gamma * inv_std)[None, :, None] * (dy - correction) * keep",
+                "    return (gamma * inv_std)[None, :, None] * (dy - correction)",
+            ),
+            (
+                "padding left in the reduction",
+                "sums over positions the layer never normalised",
+                """    x = x_chunk * keep
+    dy = dy_chunk * keep""",
+                """    x = x_chunk
+    dy = dy_chunk""",
+            ),
+            (
+                "epsilon outside the square root",
+                "adds it to the standard deviation rather than to the variance",
+                "    inv_std = 1.0 / torch.sqrt(variance + eps)",
+                "    inv_std = 1.0 / (torch.sqrt(variance) + eps)",
+            ),
+            (
+                "parameter gradients the other way round",
+                "returns the shift first and the scale second",
+                "    return dx_chunks, dgamma, dbeta",
+                "    return dx_chunks, dbeta, dgamma",
+            ),
+            (
+                "scale left out of the input gradient",
+                "normalises the gradient without carrying gamma through it",
+                "    return (gamma * inv_std)[None, :, None] * (dy - correction) * keep",
+                "    return inv_std[None, :, None] * (dy - correction) * keep",
+            ),
+            (
+                "the buffer averaged rather than summed",
+                "divides each chunk's contribution by its own row count, so the caller's sum means nothing",
+                """    return torch.stack(
+        [""",
+                """    return (1.0 / x_chunk.shape[0]) * torch.stack(
+        [""",
+            ),
+            (
+                "standardised input left unmasked",
+                "the mask that the trailing one already makes redundant",
+                "SURVIVES",
+                "    x_hat = (x_chunk - mean[None, :, None]) * inv_std[None, :, None] * keep",
+                "    x_hat = (x_chunk - mean[None, :, None]) * inv_std[None, :, None]",
+            ),
+        ],
+    ),
     "chunked_batchnorm_backward": (
         "chunked_batchnorm.py",
         [
