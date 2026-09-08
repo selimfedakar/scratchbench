@@ -180,3 +180,66 @@ count of kept positions is one of them.
 - Sixteen tasks, **748** hidden tests. Laptop thirteen, accelerated three.
 - Set counts: `v1` five, `v2` four, `warmup` **seven**, `unvalidated` empty.
 - Spend: **$1.7124**. Running total roughly $16.
+
+---
+
+## Candidate 3, written the same session, and the credit ran out
+
+The diagnosis above was cheap enough to act on immediately, so
+`chunked_batchnorm_reduction` was written before the session ended: the same
+layer, the same decomposition, and the second half of the criterion restored by
+**deleting arguments** rather than adding mechanism. The mean, the variance, the
+count and both parameter gradients are absent from every signature. The caller
+reduces exactly once, over a buffer whose contents the solution designs, and
+hands the total back on a second walk.
+
+That constraint is the whole task, because the obvious route needs two
+reductions and is not on offer: `sum(dy * xhat)` wants an `xhat` that wants a
+mean that does not exist while the reduction is running. The way through is to
+stop reducing centred quantities:
+
+    dgamma = (sum(dy * x) - mean * sum(dy)) / sqrt(var + eps)
+
+Five raw sums per channel — count, `sum(x)`, `sum(x*x)`, `sum(dy)`,
+`sum(dy*x)` — carry the mean, the variance and both parameter gradients out the
+other side. Nothing in either signature says so.
+
+L2 on both halves, `57 passed  57 failed  ok`, and sixteen mutants behaving as
+expected, fifteen caught and one expected survivor (the same redundant mask the
+sibling task documents). Tolerances measured rather than chosen: worst
+disagreement with autograd **1.472e-13** over thirty-nine seeds, seven splits,
+four mask densities and four epsilons, against `atol=1e-9`, with the chunk-local
+mistake moving the first case by **3.180**. The tolerance is two orders looser
+than the sibling task's for a reason that is the task: a single reduction cannot
+carry centred moments, so the variance comes out of a subtraction that cancels.
+
+**The measurement is incomplete and the reason is billing.** `claude-opus-5`
+went **9 of 10** — not the ceiling, and the first laptop task since
+`flash_attention_backward` that a frontier model loses a draw to.
+`claude-sonnet-5` produced one graded draw, which passed, and then nine
+`adapter_error`s: *Your credit balance is too low to access the Anthropic API*.
+Those nine measured nothing and are in neither side of the rate, which is the
+`STATUSES` table doing its job and the third time this repository has had a
+sweep cut off by billing and reported the hole rather than averaging over it.
+Haiku was never asked. The task ships `frozen_set: unvalidated` with a two-entry
+block that says exactly what was measured.
+
+**What Opus's one loss was, and it is not the mechanism.** Its reduction and its
+recovery are correct — `var = sum_xx / safe_count - mean * mean`, then
+`dgamma = (sum_dyx - mean * sum_dy) * inv_std`, which is the identity the task is
+about. What it lost on is broadcasting:
+
+```python
+count = m.sum()
+dx = gamma_b * inv_std_b * (dym - (dbeta_b + xhat * dgamma_b) / count)
+# RuntimeError: The size of tensor a (4) must match the size of tensor b (3)
+#               at non-singleton dimension 2
+```
+
+`mean`, `inv_std`, `dgamma` and `dbeta` are all reshaped to `(1, channels, 1)`
+on the four lines above; `count` is not, so it aligns with the position axis
+instead of the channel axis and the whole draw dies at the first gradient. One
+draw of one model is not a shape, and until Sonnet and Haiku are asked it is not
+known whether this task discriminates on its mechanism or on arithmetic care —
+which is the same question candidate 2 answered badly, so it is the one to
+answer with evidence rather than hope.
