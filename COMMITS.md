@@ -327,3 +327,25 @@ gh run list --limit 20 --json databaseId,conclusion \
   --jq '.[] | select(.conclusion=="failure") | .databaseId' \
   | while read -r id; do gh run delete "$id"; done
 ```
+
+### Session 16, second half — candidate 3, and a sweep the credit cut short
+
+```bash
+bash ~/scratchbench-session16b-commits.sh
+```
+
+Twenty draws plus ten files. **One push at the end**, nothing squashed. Every
+commit in it is guarded — `git add` then commit only if something was staged —
+so it is safe to run whether or not the first-half script has already gone
+through, and a file that is already committed and unchanged is skipped rather
+than aborting under `set -e`.
+
+Same hard constraint as always: the twenty draws land before
+`tasks/chunked_batchnorm_reduction/meta.yaml`, because CI re-derives every
+calibration block from `calibration/` and `leaderboard/`.
+
+⚠ The block it commits is **incomplete on purpose**. `claude-opus-5` is done at
+ten draws, `claude-sonnet-5` has one graded draw and nine `adapter_error`s from
+the credit balance running out, and Haiku was never asked. The task is
+`frozen_set: unvalidated` and says so in the file. Resuming needs credit, not
+code: nine more Sonnet draws and ten Haiku draws, about $2.
