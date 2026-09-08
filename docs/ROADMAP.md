@@ -817,3 +817,19 @@ warns about an argument standing in for a measurement, so the distinction has to
 be stated rather than assumed — `chunked_batchnorm_backward` is evidence that
 *that task* is easy, and it is not evidence about the tier, because the property
 it was supposed to isolate was never in it. Candidate 3 is that measurement.
+
+**Candidate 3 was written on 2026-09-06 and its measurement is unfinished.**
+`chunked_batchnorm_reduction` (training, laptop, torch, **57 hidden tests**) is
+the design above with `chunk_reduction` returning a two-dimensional buffer whose
+contents are the solution's own; the mean, the variance, the count and both
+parameter gradients appear in no signature. L2 on both halves,
+`57 passed  57 failed  ok`, sixteen mutants as expected. **`claude-opus-5` went
+9 of 10**, which is the first laptop task since `flash_attention_backward` that a
+frontier model loses a draw to — but its one loss is a broadcasting slip
+(`count` left at shape `(channels,)` and divided into a three-dimensional
+tensor) rather than the mechanism, whose identity it got right in all ten draws.
+`claude-sonnet-5` produced one graded draw and then nine `adapter_error`s: the
+Anthropic credit balance ran out mid-sweep. Haiku was never asked. The task is
+`frozen_set: unvalidated` with a block saying exactly that. **Resuming the sweep
+is the next session's first job and it needs credit, not code:** nine more Sonnet
+draws and ten Haiku draws, about $2.
