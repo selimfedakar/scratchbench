@@ -216,6 +216,25 @@ set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
 
 ## State as of 2026-09-05, session 16 (verify before trusting)
 
+- **Candidate 3 exists and its sweep is half done, blocked on billing.**
+  `chunked_batchnorm_reduction` (training, laptop, torch, **57 hidden tests**):
+  the same layer, one reduction, and a buffer the solution designs. The mean,
+  the variance, the count and both parameter gradients are in **no** signature,
+  so `sum(dy * xhat) = (sum(dy * x) - mean * sum(dy)) / sqrt(var + eps)` has to
+  be recovered rather than received. L2 on both halves —
+  `57 passed  57 failed  ok` — and sixteen mutants as expected.
+  **`claude-opus-5` 9/10**, `claude-sonnet-5` **1 graded draw then nine
+  `adapter_error`s — credit balance exhausted**, Haiku never asked.
+  `frozen_set: unvalidated`, block says exactly that, $1.2458 spent.
+- ⚠ **First job next session, and it needs money rather than code:** top up the
+  Anthropic credit, then nine more Sonnet draws and ten Haiku draws, about $2.
+  Do not re-draw Opus; those ten are complete and checked in (L43).
+- **Opus's single loss is not the mechanism.** Its `var = sum_xx / count - mean *
+  mean` and `dgamma = (sum_dyx - mean * sum_dy) * inv_std` are right in all ten;
+  the draw died on `dx = ... / count` with `count` left at shape `(channels,)`
+  while the four quantities beside it were reshaped to `(1, channels, 1)`, so it
+  aligned with the position axis. One draw of one model is not a shape.
+
 - **Laptop candidate 2 exists, is calibrated, and is `warmup`.**
   `chunked_batchnorm_backward` (training, laptop, torch, **44 hidden tests**):
   batch normalisation's backward pass over micro-batches the caller chose, with
