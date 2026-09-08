@@ -1,0 +1,51 @@
+{
+  "results_version": 2,
+  "harness_version": "0.1.0",
+  "model": "claude-sonnet-5",
+  "run_at": "2026-09-06T08:19:03+00:00",
+  "task_set": "unvalidated",
+  "headline_tier": "laptop",
+  "pass_rate": null,
+  "measured": 0,
+  "not_measured": 1,
+  "pass_rate_by_category": {},
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": null,
+      "solved": 0,
+      "measured": 0,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 1,
+      "categories": {}
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-sonnet-5-20260906T081651",
+    "index": 10,
+    "of": 10
+  },
+  "wall_clock_s": 0.2,
+  "usd_cost": null,
+  "tokens": null,
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python3"
+  },
+  "tasks": [
+    {
+      "slug": "chunked_batchnorm_reduction",
+      "category": "training",
+      "tier": "laptop",
+      "difficulty": 5,
+      "task_version": 1,
+      "passed": false,
+      "status": "adapter_error",
+      "duration_s": 0.2,
+      "counts": {},
+      "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011CemriVCZQdY1ouogEKzgD'}"
+    }
+  ]
+}
