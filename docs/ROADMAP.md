@@ -833,3 +833,50 @@ Anthropic credit balance ran out mid-sweep. Haiku was never asked. The task is
 `frozen_set: unvalidated` with a block saying exactly that. **Resuming the sweep
 is the next session's first job and it needs credit, not code:** nine more Sonnet
 draws and ten Haiku draws, about $2.
+
+### 9.4 Candidate 3's sweep finished, and what it settles
+
+Written 2026-09-08, after the sweep resumed and completed for $1.20.
+
+**The result.** `claude-opus-5` 9/10, `claude-sonnet-5` 10/10,
+`claude-haiku-4-5` 0/10, thirty draws in `calibration/`. The task is `warmup`
+and the reasoning is `docs/LESSONS.md` L45 and the block in its own `meta.yaml`;
+the short version is that `chunk_sizes0` is the single-chunk split, ten of the
+eleven lost draws fail it too, and Opus's one loss is a broadcasting slip rather
+than a reduction it failed to design. **Exactly one loss in thirty is the
+chunked mistake.** The frontier is 20/20 on the mechanism.
+
+**What it settles about §9.3's criterion, which is the part worth keeping.** The
+criterion is not wrong and it was not misapplied. Candidate 2 failed its second
+half; candidate 3 satisfies both halves, by construction, and it is checkable in
+the signatures — the mean, the variance, the count and both parameter gradients
+are absent from all three. So the criterion did what a criterion can do and the
+task still did not separate the frontier. That is a filter doing its job, not a
+guarantee failing to hold, and §9.3 should be read as the former from here on.
+
+**What it does not settle.** §1.2 makes option B revisitable when *two
+independent attempts at a discriminating laptop task both fail admission*, and
+that condition is still not met — candidate 3 passes admission, and the reason
+it is `warmup` is a judgement about failure shapes rather than a refusal by the
+rule. So the branch stays closed, and it is worth being exact about why, because
+the loose reading ("two candidates in a row disappointed me") would open it.
+What the two attempts actually produced is one invalid measurement (candidate 2,
+L44) and one valid measurement of a task the frontier clears (candidate 3, L45).
+Only the second is evidence about the tier, and one measurement is not two.
+
+**Where that leaves the laptop half of `v2`.** `flash_attention_backward` is
+still the only laptop task here that separates two frontier models, and §1.2's
+recommendation — option A, hold `v2` back until its laptop half is a real set —
+is unchanged and now costs one more candidate than it did. Before writing a
+fourth, run §4. The reason is §4.2 itself: this session's finding took an
+afternoon of grepping `--keep` directories by hand for something the report
+should print, and a fourth candidate designed without failure-shape columns
+would be evaluated the same slow, skippable way. **§4 is no longer only a
+precondition for §5; it is the tool the next laptop candidate needs.**
+
+**The other precondition that is now closed.** The OpenAI credit §3 was waiting
+on has been loaded and `OPENAI_API_KEY` is on the path the Anthropic adapter
+already uses, so §3 is unblocked and needs code rather than money. It stays
+after §4 in the order: a second provider multiplies the number of sweeps whose
+failures somebody has to read, and reading them by hand does not scale to two
+vendors.
