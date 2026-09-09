@@ -349,3 +349,24 @@ ten draws, `claude-sonnet-5` has one graded draw and nine `adapter_error`s from
 the credit balance running out, and Haiku was never asked. The task is
 `frozen_set: unvalidated` and says so in the file. Resuming needs credit, not
 code: nine more Sonnet draws and ten Haiku draws, about $2.
+
+### Session 17 — the sweep finished, and one loss in thirty was the task
+
+```bash
+bash ~/scratchbench-session17-commits.sh
+```
+
+Nineteen draws plus six files, twenty-five commits. **One push at the end**,
+nothing squashed, every commit guarded so a re-run skips what is already in.
+
+The same hard constraint: the nineteen draws land before
+`tasks/chunked_batchnorm_reduction/meta.yaml`, because CI re-derives every
+calibration block from `calibration/` and `leaderboard/`.
+
+What the block now says is complete: `claude-opus-5` 9/10, `claude-sonnet-5`
+10/10, `claude-haiku-4-5` 0/10. The task is `frozen_set: warmup`, and it is
+worth knowing that the admission rule would have accepted `v2` — it refuses only
+a task the top two measured entries both clear. It is `warmup` because ten of
+the eleven lost draws also fail `chunk_sizes0`, the single-chunk split where the
+chunked mistake is correct by construction. See `docs/LESSONS.md` L45 and
+`docs/ROADMAP.md` 9.4.
