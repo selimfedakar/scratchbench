@@ -28,21 +28,42 @@ added: 2026-09-06
 # it holds every chunk and could reduce twice; what is enforced is the shape of
 # the two graded functions, and the hidden tests drive the protocol themselves
 # rather than trusting it.
-frozen_set: unvalidated
+frozen_set: warmup
 #
-# The sweep on 2026-09-06 was cut off by the Anthropic credit balance running
-# out. Opus is complete at ten draws. Sonnet produced one graded draw and then
-# nine `adapter_error`s, which measured nothing and are in neither the numerator
-# nor the denominator; the entry below says one draw and the admission rule does
-# not read an entry under five on either side. Haiku was never asked. The task
-# therefore stays `unvalidated` — it is finished and it is not calibrated — and
-# the block is completed rather than replaced when the sweep resumes.
+# The sweep was cut off on 2026-09-06 by the Anthropic credit balance running
+# out, and finished on 2026-09-08: nine more Sonnet draws and ten Haiku draws.
+# The nine `adapter_error`s of the first attempt measured nothing and are in
+# neither the numerator nor the denominator, so they are not counted below.
+#
+# `warmup`, and the admission rule is not what put it there. The rule reads the
+# top two measured entries and refuses only a task both of them clear; Sonnet
+# 10/10 and Opus 9/10 do not both clear it, so `v2` would have been accepted.
+# The reason is the shape of the losses rather than their count (docs/LESSONS.md
+# L27, and L45, which is this task). `chunk_sizes0` is the single-chunk split
+# `(6,)`, where the mistake this task is named after is correct by construction.
+# Eleven draws were lost across the thirty and ten of them fail `chunk_sizes0`
+# too, Opus's one loss included: it leaves `count` at shape `(channels,)` and
+# divides it into a three-dimensional tensor, which is a broadcasting slip and
+# not a reduction it failed to design. Exactly one loss in thirty is the
+# chunked mistake — Haiku's tenth draw, which builds a correct four-row buffer,
+# omits sum(x*x) from it, and so computes the variance over one chunk while
+# dividing by the whole batch's count. The frontier is 20/20 on the mechanism.
+#
+# Admitting it to `v2` on the strength of Opus's slip would publish a number
+# about a reduction under a task whose reduction nothing at the top of the field
+# got wrong, which is L21 in a new costume. It is a real, calibrated task that
+# separates Haiku cleanly and it ships as one; it is not evidence about the
+# laptop tier. See ROADMAP.md 9.4.
 calibration:
   - model: claude-opus-5
     draws: 10
     passed: 9
     date: 2026-09-06
   - model: claude-sonnet-5
-    draws: 1
-    passed: 1
-    date: 2026-09-06
+    draws: 10
+    passed: 10
+    date: 2026-09-08
+  - model: claude-haiku-4-5
+    draws: 10
+    passed: 0
+    date: 2026-09-08
