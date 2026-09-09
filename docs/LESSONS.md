@@ -13,6 +13,73 @@ Newest first.
 
 ---
 
+## L45 — I built the mechanism correctly and it still measured something else
+
+**What I expected.** L44 said candidate 2 failed because the whole-batch state
+its graded unit was missing arrived in that unit's own signature. Candidate 3,
+`chunked_batchnorm_reduction`, was written to remove exactly that: the mean, the
+variance, the count and both parameter gradients appear in no signature, the
+caller performs one reduction whose contents the solution designs, and the
+identity that has to be recovered needs a mean that does not exist yet when the
+reduction runs. Every clause of `ROADMAP.md` §9.3's two-halved criterion is
+satisfied, and this time by construction rather than by analogy. I expected the
+frontier to lose draws to the reduction.
+
+**What happened.** Thirty draws: `claude-opus-5` 9/10, `claude-sonnet-5` 10/10,
+`claude-haiku-4-5` 0/10. The count looks like a task that discriminates. The
+shapes say otherwise, and the discriminator is one parameter id. `chunk_sizes0`
+is the split `(6,)` — one chunk holding the whole batch — where the mistake this
+task is named after is correct by construction. Eleven draws were lost and **ten
+of them fail `chunk_sizes0` as well**, so ten of the eleven are not the chunked
+mistake. Opus's single loss is one of the ten:
+
+```
+FAILED test_matches_autograd[chunk_sizes0]
+RuntimeError: The size of tensor a (4) must match the size of tensor b (3) at non-singleton dimension 2
+```
+
+It left `count` at shape `(channels,)` and divided it into a three-dimensional
+tensor while the four quantities beside it were reshaped. The reduction it
+designed was right in all ten draws.
+
+**The one draw that is the task.** Haiku's tenth, and it is the only loss in
+thirty that passes `chunk_sizes0` and fails every other split. It designs a
+correct four-row buffer — `sum(dy)`, `sum(x)`, `sum(dy*x)`, `count` — and then
+leaves `sum(x*x)` out of it, so the variance has to come from somewhere:
+
+```python
+sum_x_sq = (x_masked ** 2).sum(dim=(0, 2))   # this chunk only
+variance = (sum_x_sq / N) - mean_sq          # N is the whole batch's count
+```
+
+A chunk-local numerator over a whole-batch denominator. With one chunk the two
+agree and the answer is exact; with any split it is wrong, which is precisely
+the failure the task exists to catch. One draw in thirty.
+
+**What I actually learned, and it is not L44 again.** L44 was a design defect: I
+gave the answer away and the measurement was invalid. Here the design is sound
+and the measurement is valid, and it reports that **the frontier is 20 for 20 on
+the mechanism**. Those are different results and only the second one is
+informative about the field. The lesson is that satisfying a discriminating
+criterion is not the same as discriminating: the criterion tells me the task
+*can* separate models, and only a sweep tells me whether the models I am asking
+are in fact separated by it. I had been treating §9.3's check as sufficient
+because it was written in response to a failure, and a rule written in response
+to a failure feels like a guarantee. It is a filter.
+
+**What it changed.** The task ships as `warmup`. Note that the admission rule
+would have taken it: it refuses a task the top two measured entries both clear,
+and Sonnet 10/10 with Opus 9/10 does not clear. Reading the rule and stopping
+there would have put a task in `v2` whose headline reduction nothing at the top
+of the field got wrong, on the strength of a broadcasting slip. **A rule that
+counts cannot see a shape, so passing it is a floor and never a finding** — and
+the number 9/10, read alone, would have said the opposite of what the thirty
+draws say. That is L27 for the third time, and the third time is the one worth
+writing down: I keep re-deriving it because the rate is what the tooling hands
+me and the shape is what I have to go and look for.
+
+---
+
 ## L44 — I copied the shape of the mechanism and handed over its content
 
 **What I expected.** Selim chose option A in `ROADMAP.md` §9.1: laptop candidate
