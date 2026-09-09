@@ -214,6 +214,47 @@ folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
 
+## State as of 2026-09-08, session 17 (verify before trusting)
+
+- **Candidate 3's sweep is finished and the task is `warmup`.**
+  `chunked_batchnorm_reduction`, thirty draws in `calibration/`:
+  `claude-opus-5` **9/10**, `claude-sonnet-5` **10/10**, `claude-haiku-4-5`
+  **0/10**, $1.1997 for the nineteen draws added today. `unvalidated` is now
+  empty; the sets are **`v1` 5 · `v2` 4 · `warmup` 8**, seventeen tasks,
+  **805 hidden tests**, 251 calibration files.
+- **The rate says it discriminates and the shapes say it does not (L45).**
+  `chunk_sizes0` is the split `(6,)` — one chunk holding the whole batch — where
+  the mistake the task is named after is correct by construction. Eleven draws
+  were lost and **ten of them fail `chunk_sizes0` too**, Opus's one loss
+  included: `RuntimeError: The size of tensor a (4) must match the size of
+  tensor b (3)`, `count` left at `(channels,)`. **Exactly one loss in thirty is
+  the chunked mistake** — Haiku's tenth, which builds a correct four-row buffer,
+  omits `sum(x * x)`, and so runs `variance = (sum_x_sq / N) - mean_sq` with a
+  chunk-local numerator over the whole batch's `N`. **The frontier is 20/20 on
+  the mechanism.**
+- **This is not L44 again, and the distinction is the point.** Candidate 2's
+  measurement was invalid because the design gave the answer away. Candidate 3's
+  design is sound — mean, variance, count and both parameter gradients are in no
+  signature — so the measurement is *valid* and reports that the frontier clears
+  it. Satisfying a discriminating criterion is not discriminating: §9.3 is a
+  filter, not a guarantee.
+- ⚠ **It is `warmup` by judgement, not by rule.** `_check_admission` refuses only
+  a task the top two measured entries both clear, and Sonnet 10/10 beside Opus
+  9/10 does not clear — `v2` would have passed validation and CI. **A rule that
+  counts cannot see a shape, so passing it is a floor and never a finding.**
+- ⚠ **§1.2's option B stays closed.** It reopens when two independent attempts
+  *fail admission*; candidate 3 passed. One invalid measurement plus one valid
+  measurement is not two measurements about the tier. See `ROADMAP.md` §9.4.
+- **Next: §4 (report columns), before a fourth laptop candidate.** Finding the
+  bullet above took an afternoon of hand-running `pytest` in `--keep` directories
+  and grepping for one parameter id — which is the job §4.2 exists to do. §4 is
+  now the tool the next candidate needs, not just §5's precondition.
+- **§3's precondition is closed:** OpenAI credit is loaded and `OPENAI_API_KEY`
+  is on the same environment the Anthropic adapter reads (`~/.zshrc`; Claude's
+  shell needs `source ~/.zshrc >/dev/null 2>&1` first). ⚠ **No OpenAI request has
+  been made from this repository and the adapter does not exist.** §3 still sits
+  after §4: a second provider doubles the failure shapes somebody has to read.
+
 ## State as of 2026-09-05, session 16 (verify before trusting)
 
 - **Candidate 3 exists and its sweep is half done, blocked on billing.**
