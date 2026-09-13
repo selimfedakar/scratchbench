@@ -13,6 +13,102 @@ Newest first.
 
 ---
 
+## L46 — the second vendor did not add a column, it moved the goalposts
+
+**What I expected.** §3 was scoped as plumbing: write the OpenAI adapter, take a
+few draws, get a second column on the leaderboard so the page stops reading as
+one lab's fan project. The interesting work was supposed to be §5.
+
+**What happened.** `gpt-5.6-luna`, the cheapest model in OpenAI's current
+generation at $0.20 and $1.20 per million tokens, solved every task it was
+asked. All five of `v1`, on the first attempt, for **$0.01**. Then
+`chunked_batchnorm_reduction`, which `claude-haiku-4-5` went 0 for 10 on.
+Then `flash_attention_backward`, the **only** laptop task in this repository
+that separates two frontier Claude models. Then `metal_softmax_backward_kernel`,
+where `claude-sonnet-5` scores 6 of 10. Nine tasks asked, nine solved, about
+three cents in total, and not one graded failure to look at.
+
+`gpt-5.6-terra` and `gpt-5.6-sol` also went 5 of 5 on `v1`, at $0.11 and $0.20.
+
+**Why this is a lesson and not just a number.** Every difficulty judgement in
+this repository was calibrated against one vendor. `warmup` means "the frontier
+clears this" and the frontier meant Claude; L21 is about difficulty assigned by
+feel and refuted by a sweep, and this is the same shape one level up —
+**difficulty assigned against one lab's models and refuted by another's.** A
+task is not hard, it is hard *for the models you asked*, and until today the set
+of models asked was three Claudes.
+
+**What the nine draws support, stated as arithmetic rather than as a mood.**
+Nine tasks of mixed difficulty, nine solved. If `gpt-5.6-luna`'s true per-task
+rate on this set were `p`, the chance of seeing 9 of 9 is `p**9`:
+
+```
+p=0.50 -> 0.0020    p=0.70 -> 0.0404    p=0.90 -> 0.3874
+p=0.60 -> 0.0101    p=0.80 -> 0.1342    p=0.95 -> 0.6302
+```
+
+So the one-sided 95% bound is **p >= 0.72**. That is a real measurement and it
+is not weak: a rate of 0.5 would produce this result twice in a thousand tries.
+The set as it stands does not challenge this model, and that conclusion is
+supported.
+
+**What they do not support, and the distinction is sharp rather than cautious.**
+They cannot rank `luna` against Opus or Sonnet on any single task, because one
+draw has almost no resolving power against a model that already passes often.
+`claude-sonnet-5` scores 8 of 10 on `flash_attention_backward`; a single Sonnet
+draw passes 80% of the time, so `luna` passing it once is exactly what a Sonnet
+would most likely have done too. The same draw is compatible with `luna` being
+better, equal, or somewhat worse. No per-task rate is published from any of this
+and none should be.
+
+The one place a single draw carries weight is where the other side is measured
+and near zero: `claude-haiku-4-5` is 0 of 10 on `chunked_batchnorm_reduction`,
+which bounds it at **p <= 0.26**, and `luna` — a model at the same end of the
+price range — solved it. That is a contrast between a measured bound and a
+single observation, which is worth stating and is not worth a number.
+
+**Cost, which is measured rather than inferred.** Every figure below is
+recomputed from the token counts checked in beside it:
+
+```
+gpt-5.6-luna      5/5 on v1        $0.0110   $0.0022/solved
+gpt-5.6-terra     5/5 on v1        $0.1050   $0.0210/solved
+gpt-5.6-sol       5/5 on v1        $0.1964   $0.0393/solved
+
+claude-haiku-4-5  4/8 laptop set   $0.0766   $0.0191/solved
+claude-sonnet-5   8/8 laptop set   $0.3881   $0.0485/solved
+claude-opus-5     8/8 laptop set   $0.5560   $0.0695/solved
+```
+
+⚠ The two halves are different task sets — five `v1` tasks against the older
+eight-task laptop grouping — so the ratio is indicative and not a like-for-like
+comparison. What survives that caveat is the order of magnitude: the cheapest
+model measured here solves a laptop task for about a fifth of a cent, and the
+most expensive one for about seven cents.
+
+**What changed.** `ROADMAP.md` §10.1 shipped**What changed.** `ROADMAP.md` §10.1 shipped `v2` on the argument that a fourth
+laptop candidate has unbounded holding cost, and that argument survives — it
+gets stronger, because "write a harder task" now means harder for two fields
+rather than one. What changes is §5: the first `v2` sweep has to include the
+OpenAI models, and the announcement cannot describe the laptop tier as
+discriminating without saying for whom.
+
+**What it cost.** $0.32, and a framing I would have published without it.
+
+**A second thing I got wrong, in the other direction.** The first version of
+this entry hedged the result into meaninglessness: nine draws, one model, no
+repeats, so "the honest statement is the narrow one." That was not honesty, it
+was an unwillingness to be wrong in public. 9 of 9 across nine tasks bounds the
+rate at 0.72 and that bound was available from the same data I was refusing to
+read. **Understating what a measurement supports is not a safer error than
+overstating it** — it is the same failure to report what was measured, and here
+it would have buried the finding that most affects what this repository claims.
+The rule that produces the right answer in both directions is the one already in
+L27: go and look at the shape, then say exactly what it shows, no more and no
+less.
+
+---
+
 ## L45 — I built the mechanism correctly and it still measured something else
 
 **What I expected.** L44 said candidate 2 failed because the whole-batch state
