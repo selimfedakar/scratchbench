@@ -1342,9 +1342,15 @@ def test_only_the_declared_files_are_written(tmp_path):
 
 
 def test_a_response_with_no_usable_file_is_refused(tmp_path):
+    # `write_files` is shared by every vendor's adapter and cannot know which
+    # one called it, so it raises the base `ResponseError`. Both vendors'
+    # errors subclass it, and `grade` catches the base — an ungradeable
+    # response is `adapter_error` regardless of who served it.
     from adapters.anthropic_api import AnthropicResponseError, write_files
+    from adapters.model_api import ResponseError
 
-    with pytest.raises(AnthropicResponseError, match="none of the files"):
+    assert issubclass(AnthropicResponseError, ResponseError)
+    with pytest.raises(ResponseError, match="none of the files"):
         write_files(tmp_path, {"files": []}, {"solution.py"})
 
 
@@ -1511,3 +1517,318 @@ def test_nothing_published_was_billed_at_a_cache_rate():
             continue
         assert tokens["cache_read"] == 0, path.name
         assert tokens["cache_write"] == 0, path.name
+
+
+def test_the_failing_test_names_are_parsed_out_of_pytest_short_summary():
+    from runner.sandbox import parse_failed_tests
+
+    # Exactly the shape `-q --tb=short` prints, including the trailing reason
+    # and the truncation pytest applies to it.
+    output = (
+        "=========================== short test summary info ====================\n"
+        "FAILED test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes0] - Run...\n"
+        "FAILED test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes1] - Run...\n"
+        "FAILED test_batchnorm_reduction.py::test_channels_do_not_mix\n"
+        "2 failed, 55 passed in 1.53s\n"
+    )
+    assert parse_failed_tests(output) == [
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes0]",
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes1]",
+        "test_batchnorm_reduction.py::test_channels_do_not_mix",
+    ]
+
+
+def test_the_failing_names_keep_their_order_and_drop_repeats():
+    from runner.sandbox import parse_failed_tests
+
+    # A relaunch under the MPS stall guard can concatenate two attempts' output
+    # into one string, and the same node id appearing twice is one result.
+    output = (
+        "FAILED t.py::test_b\n"
+        "FAILED t.py::test_a\n"
+        "FAILED t.py::test_b\n"
+    )
+    assert parse_failed_tests(output) == ["t.py::test_b", "t.py::test_a"]
+
+
+def test_an_error_line_is_not_a_failing_test():
+    from runner.sandbox import parse_failed_tests
+
+    # `ERROR` means nothing judged the solution. Reporting it beside the
+    # failures would give a shape to an absence of evidence (L20).
+    output = "ERROR t.py::test_a\nFAILED t.py::test_b\n"
+    assert parse_failed_tests(output) == ["t.py::test_b"]
+
+
+def test_a_graded_failure_carries_the_names_into_the_results_file():
+    tasks = select_tasks(TASKS_ROOT, "softmax_stability")
+
+    def wrong_solve(task, workdir):
+        for name in sorted(path.name for path in workdir.glob("*.py")):
+            (workdir / name).write_text(
+                "def softmax(*args, **kwargs):\n    raise AssertionError('no')\n",
+                encoding="utf-8",
+            )
+
+    outcome = grade(tasks[0], wrong_solve)
+    payload = reporting.build_payload("dummy", tasks, [outcome], wall_clock_s=1.0)
+    entry = payload["tasks"][0]
+
+    # Whatever the status turns out to be, the file may not claim a shape it
+    # does not have: names appear only when the tests judged the solution.
+    if entry["status"] == "failed":
+        assert entry["failed_tests"], "a graded failure with no names is a lost shape"
+        assert len(entry["failed_tests"]) == entry["counts"].get("failed")
+    else:
+        assert entry["failed_tests"] == []
+
+
+def test_a_pass_carries_an_empty_list_rather_than_nothing():
+    # Present and empty is a claim: the tests ran and none failed. A missing key
+    # is the older schema, which claims nothing.
+    tasks = select_tasks(TASKS_ROOT, "softmax_stability")
+    payload = reporting.build_payload(
+        "dummy", tasks, [grade(tasks[0], reference_solve)], wall_clock_s=1.0
+    )
+    assert payload["tasks"][0]["failed_tests"] == []
+    assert payload["results_version"] == 3
+
+
+def test_every_published_results_file_still_reads_after_the_bump():
+    # Every file in `calibration/` and `leaderboard/` predates `failed_tests`.
+    # They are the repository's evidence and CI re-derives from them, so a
+    # schema bump that makes them unreadable destroys the thing it versions.
+    import json
+
+    root = Path(__file__).resolve().parents[1]
+    published = sorted(root.glob("calibration/*.json")) + sorted(
+        root.glob("leaderboard/**/*.json")
+    )
+    assert published, "no published results files found to check"
+    for path in published:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert payload["results_version"] <= reporting.RESULTS_VERSION
+        for entry in payload["tasks"]:
+            # Absent is the only correct answer for an older file: the names
+            # were never recorded and cannot be backfilled.
+            assert "failed_tests" not in entry or isinstance(
+                entry["failed_tests"], list
+            )
+
+
+def test_cost_per_solved_divides_by_what_the_run_actually_solved():
+    payload = {
+        "usd_cost": 1.20,
+        "tasks": [{"passed": True}, {"passed": True}, {"passed": False}],
+    }
+    assert reporting.cost_per_solved(payload) == pytest.approx(0.60)
+
+
+def test_cost_per_solved_refuses_the_three_cases_that_are_not_a_number():
+    # No cost recorded is not a cost of zero.
+    assert reporting.cost_per_solved({"tasks": [{"passed": True}]}) is None
+    assert reporting.cost_per_solved({"usd_cost": None, "tasks": []}) is None
+    # Nothing solved: the run bought no solutions. `inf` would format as a
+    # number and read as a very bad score rather than as no score.
+    assert reporting.cost_per_solved({"usd_cost": 5.0, "tasks": [{"passed": False}]}) is None
+    # Nothing measured at all: no denominator existed.
+    assert reporting.cost_per_solved({"usd_cost": 5.0, "tasks": []}) is None
+
+
+def test_a_task_that_never_ran_moves_neither_side_of_cost_per_solved():
+    # `needs_accelerator` cost nothing and solved nothing. Counting it as a
+    # failure would inflate the cost of everything that did run (L20).
+    without = {"usd_cost": 2.0, "tasks": [{"passed": True}, {"passed": True}]}
+    with_gate = {
+        "usd_cost": 2.0,
+        "tasks": [
+            {"passed": True},
+            {"passed": True},
+            {"passed": False, "status": "needs_accelerator"},
+        ],
+    }
+    assert reporting.cost_per_solved(without) == reporting.cost_per_solved(with_gate)
+
+
+def test_the_leaderboard_table_carries_the_cost_per_solved_column():
+    payload = {
+        "model": "dummy",
+        "run_at": "2026-09-08T00:00:00+00:00",
+        "wall_clock_s": 1.0,
+        "usd_cost": 1.0,
+        "task_set": "v2",
+        "pass_rate": 1.0,
+        "measured": 2,
+        "pass_rate_by_tier": {
+            "laptop": {"pass_rate": 1.0, "solved": 2, "total": 2, "measured": 2}
+        },
+        "tasks": [{"passed": True}, {"passed": True}],
+    }
+    table = reporting.format_leaderboard([payload])
+    assert "$/solved" in table
+    assert "$0.500" in table
+
+
+def _renderer():
+    import importlib.util
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "render_leaderboard", root / "tools" / "render_leaderboard.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_published_leaderboard_matches_the_files_behind_it():
+    # The same assertion CI makes. A hand-edited number in the page and the
+    # results files that justify it cannot both be right, and the files are.
+    rl = _renderer()
+    page = rl.PAGE.read_text(encoding="utf-8")
+    assert rl.rewrite(page) == page, (
+        "leaderboard/README.md is out of date; run tools/render_leaderboard.py"
+    )
+
+
+def test_only_the_marked_regions_are_generated():
+    # The prose is the part worth reading and no generator has an opinion about
+    # it. Everything outside a marker pair must survive a render byte for byte.
+    rl = _renderer()
+    page = rl.PAGE.read_text(encoding="utf-8")
+    rendered = rl.rewrite(page)
+    outside = rl.REGION.sub("<<region>>", page)
+    assert rl.REGION.sub("<<region>>", rendered) == outside
+
+
+def test_a_draw_that_graded_nothing_is_not_counted_as_a_loss():
+    # The bug this function was born with: filtering only `needs_accelerator`
+    # left timeouts and adapter errors in the denominator, which disagreed with
+    # the hand-written table by one draw in two places (L20).
+    rl = _renderer()
+    payload = {
+        "tasks": [
+            {"slug": "a", "status": "passed", "passed": True},
+            {"slug": "b", "status": "timeout", "passed": False},
+            {"slug": "c", "status": "needs_accelerator", "passed": False},
+            {"slug": "d", "status": "adapter_error", "passed": False},
+            {"slug": "e", "status": "mps_stalled", "passed": False},
+            {"slug": "f", "status": "failed", "passed": False},
+        ]
+    }
+    # `timeout` stays in, and it is the one status that is both evidence and a
+    # failure: the model was asked, the clock is part of the task, and a run
+    # that never finished is a run that did not solve it.
+    assert [entry["slug"] for entry in rl.graded(payload)] == ["a", "b", "f"]
+
+
+def test_a_single_draw_run_stays_out_of_a_table_that_reports_a_spread():
+    # The two 2026-08-03 files have no `repeat` block. Folding a run of one into
+    # a column headed "5 draws" would state a range nobody measured (L19).
+    rl = _renderer()
+    drawn = rl.load("laptop-v1")
+    assert drawn, "no laptop draws found"
+    assert all(payload.get("repeat") for payload in drawn)
+    assert len(drawn) == 15
+
+
+class FakeOpenAIUsage:
+    def __init__(self, input_tokens, output_tokens, cached=0):
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.input_tokens_details = type("D", (), {"cached_tokens": cached})()
+
+
+def test_openai_cached_tokens_are_a_subset_of_the_input_count():
+    from adapters.openai_api import price_from_counts, price_of
+
+    # $4.00 fresh, $0.40 cached, per million. If cached tokens were added to
+    # the input count instead of taken out of it, a fully cached prompt would
+    # cost $4.40 rather than $0.40 and every published figure would be wrong.
+    assert price_from_counts("gpt-5.6-sol", 1_000_000, 0) == pytest.approx(4.0)
+    assert price_from_counts(
+        "gpt-5.6-sol", 1_000_000, 0, cache_read=1_000_000
+    ) == pytest.approx(0.4)
+    assert price_of("gpt-5.6-sol", FakeOpenAIUsage(1_000_000, 1_000_000)) == pytest.approx(24.0)
+
+
+def test_an_openai_model_with_no_published_price_is_not_free():
+    from adapters.openai_api import price_from_counts
+
+    assert price_from_counts("gpt-9-imaginary", 1_000_000, 1_000_000) is None
+
+
+def test_an_openai_dated_snapshot_prices_and_identifies_as_its_alias():
+    from adapters.openai_api import price_from_counts, same_model
+
+    assert same_model("gpt-5.4", "gpt-5.4-2026-03-05")
+    assert not same_model("gpt-5.4", "gpt-5.4-mini")
+    assert price_from_counts("gpt-5.4-2026-03-05", 1_000_000, 0) == pytest.approx(2.5)
+
+
+class FakeResponse:
+    def __init__(self, status="completed", model="gpt-5.6-luna", text="{}", output=(), reason=None):
+        self.status = status
+        self.model = model
+        self.output_text = text
+        self.output = list(output)
+        self.usage = FakeOpenAIUsage(10, 10)
+        self.incomplete_details = type("I", (), {"reason": reason})()
+
+
+def _adapter_with(response, tmp_path):
+    from adapters.openai_api import OpenAIAdapter
+
+    (tmp_path / "solution.py").write_text("def f():\n    ...\n", encoding="utf-8")
+    adapter = OpenAIAdapter("gpt-5.6-luna")
+    adapter._client = type(
+        "C", (), {"responses": type("R", (), {"create": lambda *a, **k: response})()}
+    )()
+    return adapter
+
+
+def test_a_truncated_openai_response_is_not_a_wrong_answer(tmp_path):
+    # A file cut off mid-line is a missing answer, not a bad one. Scoring it
+    # zero would file a token ceiling under the model's name.
+    from adapters.openai_api import OpenAIResponseError
+
+    task = select_tasks(TASKS_ROOT, "softmax_stability")[0]
+    adapter = _adapter_with(FakeResponse(status="incomplete", reason="max_output_tokens"), tmp_path)
+    with pytest.raises(OpenAIResponseError, match="incomplete"):
+        adapter.solve(task, tmp_path)
+
+
+def test_an_openai_refusal_is_an_absence_of_evidence(tmp_path):
+    # A refusal arrives as its own content type rather than as text, so looking
+    # only at `output_text` would turn it into a parse error and lose the reason.
+    from adapters.openai_api import OpenAIResponseError
+
+    refusal = type("C", (), {"type": "refusal", "refusal": "no thanks"})()
+    item = type("I", (), {"content": [refusal]})()
+    task = select_tasks(TASKS_ROOT, "softmax_stability")[0]
+    adapter = _adapter_with(FakeResponse(output=[item]), tmp_path)
+    with pytest.raises(OpenAIResponseError, match="declined"):
+        adapter.solve(task, tmp_path)
+
+
+def test_an_openai_substitution_is_refused_rather_than_published(tmp_path):
+    # Nothing here asks for a fallback, so a different model answering means
+    # the run would publish its score under the requested model's name.
+    from adapters.openai_api import OpenAIResponseError
+
+    task = select_tasks(TASKS_ROOT, "softmax_stability")[0]
+    adapter = _adapter_with(FakeResponse(model="gpt-5.6-terra"), tmp_path)
+    with pytest.raises(OpenAIResponseError, match="asked gpt-5.6-luna"):
+        adapter.solve(task, tmp_path)
+
+
+def test_both_vendors_are_asked_the_same_question():
+    # The whole reason the prompt lives in `model_api`. Two leaderboard columns
+    # built from different questions are not a comparison, and nothing in a
+    # results file would say so.
+    from adapters import anthropic_api, model_api, openai_api
+
+    assert anthropic_api.build_prompt is model_api.build_prompt
+    assert openai_api.build_prompt is model_api.build_prompt
+    assert anthropic_api.SYSTEM_PROMPT is openai_api.SYSTEM_PROMPT
+    assert anthropic_api.response_schema is openai_api.response_schema
