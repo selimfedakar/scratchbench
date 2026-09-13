@@ -45,7 +45,15 @@ from pathlib import Path
 
 from runner.tasks import Task
 
-from .model_api import ModelAdapter
+from .model_api import (
+    INSTRUCTIONS,
+    SYSTEM_PROMPT,
+    ModelAdapter,
+    ResponseError,
+    build_prompt,
+    response_schema,
+    write_files,
+)
 
 #: Used when the model is named by its adapter alias (`--model anthropic`)
 #: rather than by a model id.
@@ -84,87 +92,13 @@ CACHE_READ_MULTIPLIER = 0.1
 #: call streams, so a large ceiling costs nothing until it is used.
 MAX_TOKENS = 64000
 
-SYSTEM_PROMPT = (
-    "You are implementing machine learning machinery from a written "
-    "specification. Return complete, runnable file contents. Follow the "
-    "specification's stated conventions exactly — shapes, dtypes, and edge "
-    "case behaviour are part of the requirement, not suggestions."
-)
+class AnthropicResponseError(ResponseError):
+    """The response cannot be graded, and is not evidence about the model.
 
-INSTRUCTIONS = (
-    "Return the full contents of every file listed below, with the stubs "
-    "implemented. Return whole files rather than diffs or fragments, and keep "
-    "the given function and class signatures unchanged."
-)
-
-
-class AnthropicResponseError(RuntimeError):
-    """The response cannot be graded, and is not evidence about the model."""
-
-
-def build_prompt(task: Task, workdir: Path) -> str:
-    """The user turn: the task's specification, then the files to fill in.
-
-    Everything here comes from `prompt.md` and the starter files sitting in
-    `workdir`. Nothing reads `hidden_tests/` or `reference/`.
+    A subclass rather than an alias, so a caller can still catch one vendor's
+    failures alone. The shared behaviour, and the reason `grade` turns either
+    into `adapter_error` rather than a zero, is on `ResponseError`.
     """
-    parts = [task.prompt().strip(), "", INSTRUCTIONS, ""]
-    for path in sorted(Path(workdir).glob("*.py")):
-        parts.append(f"--- {path.name} ---")
-        parts.append(path.read_text(encoding="utf-8").rstrip())
-        parts.append("")
-    return "\n".join(parts).strip() + "\n"
-
-
-def response_schema(filenames: list[str]) -> dict:
-    """A JSON schema that can only describe the files this task declared."""
-    return {
-        "type": "object",
-        "properties": {
-            "files": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        # An enum rather than a free string: the filename is
-                        # not something the model gets to invent, because the
-                        # hidden tests import one specific module name.
-                        "filename": {"type": "string", "enum": sorted(filenames)},
-                        "content": {"type": "string"},
-                    },
-                    "required": ["filename", "content"],
-                    "additionalProperties": False,
-                },
-            }
-        },
-        "required": ["files"],
-        "additionalProperties": False,
-    }
-
-
-def write_files(workdir: Path, payload: dict, allowed: set[str]) -> list[str]:
-    """Write the returned files into `workdir`. Returns the names written.
-
-    `allowed` is the authority. The schema already constrains the filename, so
-    a name outside the set means either a schema that was not enforced or a
-    model working around it; either way the file does not land.
-    """
-    workdir = Path(workdir)
-    written: list[str] = []
-    for entry in payload.get("files") or []:
-        name = entry.get("filename")
-        content = entry.get("content")
-        if name not in allowed or not isinstance(content, str):
-            continue
-        (workdir / name).write_text(content, encoding="utf-8")
-        written.append(name)
-
-    if not written:
-        raise AnthropicResponseError(
-            "the response contained none of the files the task asked for "
-            f"({', '.join(sorted(allowed))})"
-        )
-    return written
 
 
 def same_model(asked: str, answered: str) -> bool:
