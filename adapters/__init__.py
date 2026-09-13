@@ -10,8 +10,10 @@ cannot read them. What it leaves on disk is what gets graded.
 
 `reference` came first, for a reason that outranks convenience: the runner has
 to be proven against a known correct solution before any model's score is worth
-writing down. `anthropic` is the first real model adapter; `openai` is still a
-skeleton — see `adapters/model_api.py`.
+writing down. `anthropic` and `openai` are both real, and both build their
+request from the shared prompt and schema in `adapters/model_api.py`, because
+two leaderboard columns are only comparable if the models were asked the same
+question.
 
 Adapters are built per run rather than kept as module-level singletons, because
 the model id is an argument to the adapter: `--model claude-opus-5` and
@@ -21,7 +23,7 @@ the model id is an argument to the adapter: `--model claude-opus-5` and
 from __future__ import annotations
 
 from .anthropic_api import AnthropicAdapter
-from .model_api import OpenAIAdapter
+from .openai_api import OpenAIAdapter
 from .reference import solve as reference_solve
 
 
@@ -43,6 +45,7 @@ PREFIXES = (
     ("gpt", "openai"),
     ("o1", "openai"),
     ("o3", "openai"),
+    ("o4", "openai"),
 )
 
 
