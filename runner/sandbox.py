@@ -41,6 +41,13 @@ PYTEST_TESTS_FAILED = 1
 
 SUMMARY_PATTERN = re.compile(r"(\d+) (passed|failed|error|errors|skipped|xfailed|xpassed)")
 
+#: pytest's short test summary, one line per failure: `FAILED <nodeid> - <why>`.
+#: `-q` and `--tb=short` both leave it on, so the names arrive without asking
+#: for anything new. `ERROR` lines are deliberately not matched — an error means
+#: nothing judged the solution, and a list of names would read as if something
+#: had (`STATUSES`, and `docs/LESSONS.md` L20).
+FAILED_PATTERN = re.compile(r"^FAILED (\S+)", re.MULTILINE)
+
 
 @dataclass(frozen=True)
 class StatusMeaning:
@@ -122,6 +129,9 @@ class Outcome:
     duration_s: float
     returncode: int | None = None
     counts: dict[str, int] = field(default_factory=dict)
+    #: Node ids of the failing tests. Empty whenever nothing judged the
+    #: solution, so an empty list never has to be read as "nothing failed".
+    failed_tests: list[str] = field(default_factory=list)
     detail: str = ""
     output: str = ""
 
@@ -148,6 +158,28 @@ def parse_summary(stdout: str) -> dict[str, int]:
         label = "error" if label == "errors" else label
         counts[label] = counts.get(label, 0) + int(count)
     return counts
+
+
+def parse_failed_tests(stdout: str) -> list[str]:
+    """The node ids of the tests that failed, in the order pytest reported them.
+
+    A count is not a shape. `9/10` says a model lost one draw and says nothing
+    about whether it lost it to the mechanism the task is named after or to a
+    tensor it forgot to reshape, and those are different findings about
+    different models (`docs/LESSONS.md` L27, and L45, which is the session that
+    established this by hand). The names are already on stdout; all that was
+    missing was keeping them.
+
+    Duplicates are dropped and order is preserved, because a parametrised test
+    that fails under several ids is several results and a repeated id is not.
+    """
+    seen: set[str] = set()
+    names: list[str] = []
+    for nodeid in FAILED_PATTERN.findall(stdout):
+        if nodeid not in seen:
+            seen.add(nodeid)
+            names.append(nodeid)
+    return names
 
 
 def assemble(task: Task, solution_dir: Path, workdir: Path) -> None:
@@ -402,6 +434,11 @@ def grade(task: Task, solve, keep_workdir: Path | None = None) -> Outcome:
             duration_s=elapsed,
             returncode=returncode,
             counts=counts,
+            # Only when the tests judged the solution. A `solution_error` run
+            # can still print `FAILED` lines before the error that stopped it,
+            # and publishing those beside a status that means "nothing was
+            # judged" would give a shape to an absence of evidence.
+            failed_tests=parse_failed_tests(output) if status == "failed" else [],
             detail=detail,
             output=output,
         )
