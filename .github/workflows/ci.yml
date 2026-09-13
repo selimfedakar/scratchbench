@@ -63,6 +63,15 @@ jobs:
       - name: Calibration blocks reproduce from their own draws
         run: python tools/check_calibration.py
 
+      # And the same idea one document over. The leaderboard's tables were
+      # written by hand, which was fine at two rows and is a drift risk at
+      # twenty: a rate edited in the page and never edited in the files behind
+      # it looks exactly like a rate that was measured. Only the marked table
+      # regions are generated; the prose is not, and this step does not touch
+      # it.
+      - name: The leaderboard's tables match the results behind them
+        run: python tools/render_leaderboard.py --check
+
 # There is no accelerated job here, and its absence is a decision rather than an
 # omission. Running the accelerated tier in CI means attaching a self-hosted
 # runner with an NVIDIA device to this repository, and this repository is
