@@ -370,3 +370,41 @@ a task the top two measured entries both clear. It is `warmup` because ten of
 the eleven lost draws also fail `chunk_sizes0`, the single-chunk split where the
 chunked mistake is correct by construction. See `docs/LESSONS.md` L45 and
 `docs/ROADMAP.md` 9.4.
+
+### Session 17, second half — the finish plan, section 4, and section 3
+
+```bash
+bash ~/scratchbench-session17b-commits.sh
+```
+
+Sixteen files, sixteen commits, one push. Sections **4 and 3 both land here**,
+which is two roadmap sessions in one. `ROADMAP.md` gains §10: `v2` ships now with
+option C's reporting shape, the OpenAI adapter is in launch scope, a CUDA box is
+rented for one session, ~$40 over four sessions. It also carries **all of §4** —
+`failed_tests` at results version 3, `cost_per_solved`, and
+`tools/render_leaderboard.py` with its CI gate.
+
+⚠ `leaderboard/README.md` changes in this batch. The rates and counts are
+unchanged; what changes is that the four tables are now generated, gain a
+`$ per solved` column, and `.github/workflows/ci.yml` fails the build if the page
+and the files behind it ever disagree.
+
+⚠ `adapters/model_api.py` stops being a skeleton module and becomes the shared
+contract: the prompt, the schema and the writer move there out of
+`anthropic_api.py`, unchanged, so both vendors ask the same question. The
+Anthropic adapter imports them back under the same names and
+`AnthropicResponseError` becomes a subclass of the shared `ResponseError`, so
+nothing that caught it before stops working. `tools/check_cost.py` routes a
+model to its own vendor's price table through `adapters.resolve`, rather than
+holding a second prefix table that could disagree with the runner about who
+serves what.
+
+⛔ No results files are committed. The OpenAI draws are one per model, and a
+calibration block needs ten.
+
+No draws and no `meta.yaml`, so there is no calibration ordering constraint. The
+order that is there is the usual one: the three code files land before the three
+records, because every number in the records is produced by the code above them.
+The harness suite is **120 passed** after it, up from 110, and
+`tools/check_calibration.py` and `tools/check_cost.py` both still read all 251
+published files at the older schema.
