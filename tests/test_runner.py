@@ -1512,18 +1512,47 @@ def test_a_cost_with_no_tokens_behind_it_is_unverifiable_rather_than_fine(tmp_pa
     assert verdict == "UNCHECKABLE"
 
 
-def test_nothing_published_was_billed_at_a_cache_rate():
-    # The cache multipliers are the one part of the price arithmetic no live
-    # call has ever exercised: this adapter sends each task once, as its own
-    # prompt, so there is no prefix to reuse and the two cache counts are zero
-    # by construction. Saying that is only worth anything if the published
-    # files agree, so this is where the claim is checked rather than asserted.
+def test_no_published_draw_was_billed_for_writing_a_cache():
+    # This used to assert both cache counts were zero everywhere, on the
+    # reasoning that each task is sent once as its own prompt so there is no
+    # prefix to reuse. That was true, and it was a fact about *Anthropic*:
+    # caching there is opt-in and this adapter never sets `cache_control`.
+    # OpenAI caches long prompt prefixes automatically, with nothing to opt
+    # into, and the v2 sweep published draws reading 3862 tokens from a cache
+    # nobody asked for. The invariant that survives both vendors is narrower.
+    #
+    # Nobody is billed for a cache *write*: Anthropic because no write is ever
+    # requested, OpenAI because it does not charge for one.
     for path in sorted((REPO_ROOT / "leaderboard").glob("*.json")):
         tokens = json.loads(path.read_text())["tokens"]
         if tokens is None:  # the adapter never answered; there are no counts
             continue
-        assert tokens["cache_read"] == 0, path.name
         assert tokens["cache_write"] == 0, path.name
+
+
+def test_a_cached_read_is_a_subset_of_the_input_it_was_read_from():
+    # The arithmetic this protects is in `openai_api.price_from_counts`, which
+    # *subtracts* the cached count from the input count because the API reports
+    # cached tokens as a subset. If a vendor ever reported them alongside
+    # instead, the subtraction would silently under-bill every row rather than
+    # fail, and a cost that is wrong in the cheap direction is the one nobody
+    # goes looking for.
+    for path in sorted((REPO_ROOT / "leaderboard").glob("*.json")):
+        tokens = json.loads(path.read_text())["tokens"]
+        if tokens is None:
+            continue
+        assert tokens["cache_read"] <= tokens["input"], path.name
+
+
+def test_anthropic_draws_never_read_a_cache_because_none_is_ever_requested():
+    # The original claim, kept where it is still true and still load-bearing:
+    # two Anthropic rows are only comparable to each other if neither was
+    # quietly served from a warm prefix.
+    for path in sorted((REPO_ROOT / "leaderboard").glob("claude-*.json")):
+        tokens = json.loads(path.read_text())["tokens"]
+        if tokens is None:
+            continue
+        assert tokens["cache_read"] == 0, path.name
 
 
 def test_the_failing_test_names_are_parsed_out_of_pytest_short_summary():
