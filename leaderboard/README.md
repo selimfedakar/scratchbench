@@ -11,11 +11,13 @@ headline: no GPU, reproducible by anyone with a clone and an API key.
 
 ## Laptop tier — 8 tasks, 308 hidden tests
 
-| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock | Attempts |
-|---|---:|---:|---:|---:|---:|---:|
-| `claude-opus-5` | **100%**, every draw | 5 | 40/40 | $0.49 to $0.56 | 187 to 215s | 1 |
-| `claude-sonnet-5` | **100%**, every draw | 5 | 39/39 | $0.30 to $0.43 | 176 to 751s | 1 |
-| `claude-haiku-4-5` | **38% to 50%**, mean 45% | 5 | 18/40 | $0.059 to $0.077 | 62 to 90s | 1 |
+<!-- rendered: laptop-v1 -->
+| Model | Pass rate | Draws | Solved | Cost per draw | $ per solved | Wall clock | Attempts |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `claude-opus-5` | **100%**, every draw | 5 | 40/40 | $0.491 to $0.556 | $0.061 to $0.070 | 187 to 215s | 1 |
+| `claude-sonnet-5` | **100%**, every draw | 5 | 39/39 | $0.302 to $0.428 | $0.043 to $0.053 | 176 to 751s | 1 |
+| `claude-haiku-4-5` | **45%**, 38% to 50% by draw | 5 | 18/40 | $0.059 to $0.077 | $0.015 to $0.022 | 62 to 90s | 1 |
+<!-- /rendered -->
 
 Files: opus [1](claude-opus-5-20260809-draw1.json)
 [2](claude-opus-5-20260809-draw2.json) [3](claude-opus-5-20260809-draw3.json)
@@ -58,16 +60,18 @@ behind them; what changed is which set the tasks belong to, and a sweep of
 
 ### Task by task, k out of 5 draws
 
+<!-- rendered: laptop-v1-by-task -->
 | Task | Difficulty | `claude-opus-5` | `claude-sonnet-5` | `claude-haiku-4-5` |
 |---|:---:|:---:|:---:|:---:|
 | `softmax_stability` | 1 | 5/5 | 5/5 | 0/5 |
-| `bpe_merge_order` | 2 | 5/5 | 5/5 | 0/5 |
 | `attention_causal_mask` | 2 | 5/5 | 5/5 | **3/5** |
-| `kv_cache_equivalence` | 3 | 5/5 | 5/5 | 5/5 |
+| `bpe_merge_order` | 2 | 5/5 | 5/5 | 0/5 |
 | `grad_accumulation` | 3 | 5/5 | 5/5 | 0/5 |
-| `sharded_dataloader` | 4 | 5/5 | 5/5 | 5/5 |
+| `kv_cache_equivalence` | 3 | 5/5 | 5/5 | 5/5 |
 | `quantization_error_bounds` | 4 | 5/5 | 5/5 | 5/5 |
+| `sharded_dataloader` | 4 | 5/5 | 5/5 | 5/5 |
 | `online_softmax_attention` | 5 | 5/5 | 4/4 | 0/5 |
+<!-- /rendered -->
 
 ## Accelerated tier, Metal — `metal_cross_entropy_kernel`, 68 hidden tests
 
@@ -79,11 +83,13 @@ anyone with an Apple silicon Mac can re-run every number in this section.
 
 Ten independent draws per model, one attempt each.
 
-| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock | Attempts |
-|---|---:|---:|---:|---:|---:|---:|
-| `claude-opus-5` | **80%** | 10 | 8/10 | $0.078 to $0.108 | 31 to 48s | 1 |
-| `claude-sonnet-5` | **40%** | 10 | 4/10 | $0.033 to $0.091 | 19 to 52s | 1 |
-| `claude-haiku-4-5` | **11%** | 9 | 1/9 | $0.006 to $0.117 | 8 to 310s | 1 |
+<!-- rendered: metal-cross-entropy -->
+| Model | Pass rate | Draws | Solved | Cost per draw | $ per solved | Wall clock | Attempts |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `claude-opus-5` | **80%** | 10 | 8/10 | $0.078 to $0.108 | $0.078 to $0.108 | 31 to 48s | 1 |
+| `claude-sonnet-5` | **40%** | 10 | 4/10 | $0.033 to $0.091 | $0.042 to $0.091 | 19 to 52s | 1 |
+| `claude-haiku-4-5` | **11%** | 9 | 1/9 | $0.006 to $0.117 | $0.011 | 8 to 310s | 1 |
+<!-- /rendered -->
 
 Files: opus [1](accelerated-metal-claude-opus-5-20260813-draw1.json)
 [2](accelerated-metal-claude-opus-5-20260813-draw2.json)
@@ -183,10 +189,12 @@ triton 3.4.0, Linux 6.8, Python 3.12. Reference 24 passed, untouched starter 24
 failed, six mutants out of six caught — the second distinct card this task has
 been proved on, after an RTX A4500.
 
-| Model | Pass rate | Draws | Solved | Cost per draw | Wall clock | Attempts |
-|---|---:|---:|---:|---:|---:|---:|
-| `claude-opus-5` | **20%** | 5 | 1/5 | $0.049 to $0.061 | 24 to 29s | 1 |
-| `claude-haiku-4-5` | **60%** | 5 | 3/5 | $0.008 | 12 to 17s | 1 |
+<!-- rendered: cuda-rmsnorm -->
+| Model | Pass rate | Draws | Solved | Cost per draw | $ per solved | Wall clock | Attempts |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `claude-opus-5` | **20%** | 5 | 1/5 | $0.049 to $0.061 | $0.049 | 24 to 29s | 1 |
+| `claude-haiku-4-5` | **60%** | 5 | 3/5 | $0.008 | $0.008 | 12 to 17s | 1 |
+<!-- /rendered -->
 
 Files: opus [1](accelerated-claude-opus-5-20260809-draw1.json)
 [2](accelerated-claude-opus-5-20260809-draw2.json)
