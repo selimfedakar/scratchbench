@@ -6,8 +6,9 @@ solution will happily report that a model failed when what actually failed was
 the harness. CI runs the reference on every commit, and only then does pointing
 a model at this benchmark produce a number anyone should believe.
 
-`adapters/anthropic_api.py` is the first real one and is written against the
-contract below; `OpenAIAdapter` still raises.
+`adapters/anthropic_api.py` and `adapters/openai_api.py` are both written
+against the contract below, and both use the shared prompt and schema in this
+module so the two vendors are asked the same question.
 
 What an adapter has to do:
 
@@ -38,6 +39,113 @@ from pathlib import Path
 from runner.tasks import Task
 
 
+# ---------------------------------------------------------------------------
+# Shared by every hosted adapter.
+#
+# These four pieces live here rather than in one vendor's module because two
+# leaderboard columns are only comparable if the models behind them were asked
+# the same question. A second copy of the prompt would drift, and nothing in a
+# results file would say that GPT had been asked something Claude was not. The
+# schema and the writer are here for a second reason: they are what stops a
+# model writing a file the task never declared, and that guarantee should not
+# be re-implemented per vendor.
+# ---------------------------------------------------------------------------
+
+
+class ResponseError(RuntimeError):
+    """The response cannot be graded, and is not evidence about the model.
+
+    `grade` turns this into `adapter_error`: no pass, no fail, and out of every
+    rate. A truncated answer, a refusal, and an answer served by a different
+    model than the one asked are all this, and scoring them as failures would
+    file a harness problem under the model's name.
+    """
+
+
+
+SYSTEM_PROMPT = (
+    "You are implementing machine learning machinery from a written "
+    "specification. Return complete, runnable file contents. Follow the "
+    "specification's stated conventions exactly — shapes, dtypes, and edge "
+    "case behaviour are part of the requirement, not suggestions."
+)
+
+INSTRUCTIONS = (
+    "Return the full contents of every file listed below, with the stubs "
+    "implemented. Return whole files rather than diffs or fragments, and keep "
+    "the given function and class signatures unchanged."
+)
+
+
+class ResponseError(RuntimeError):
+    """The response cannot be graded, and is not evidence about the model."""
+
+
+def build_prompt(task: Task, workdir: Path) -> str:
+    """The user turn: the task's specification, then the files to fill in.
+
+    Everything here comes from `prompt.md` and the starter files sitting in
+    `workdir`. Nothing reads `hidden_tests/` or `reference/`.
+    """
+    parts = [task.prompt().strip(), "", INSTRUCTIONS, ""]
+    for path in sorted(Path(workdir).glob("*.py")):
+        parts.append(f"--- {path.name} ---")
+        parts.append(path.read_text(encoding="utf-8").rstrip())
+        parts.append("")
+    return "\n".join(parts).strip() + "\n"
+
+
+def response_schema(filenames: list[str]) -> dict:
+    """A JSON schema that can only describe the files this task declared."""
+    return {
+        "type": "object",
+        "properties": {
+            "files": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        # An enum rather than a free string: the filename is
+                        # not something the model gets to invent, because the
+                        # hidden tests import one specific module name.
+                        "filename": {"type": "string", "enum": sorted(filenames)},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["filename", "content"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["files"],
+        "additionalProperties": False,
+    }
+
+
+def write_files(workdir: Path, payload: dict, allowed: set[str]) -> list[str]:
+    """Write the returned files into `workdir`. Returns the names written.
+
+    `allowed` is the authority. The schema already constrains the filename, so
+    a name outside the set means either a schema that was not enforced or a
+    model working around it; either way the file does not land.
+    """
+    workdir = Path(workdir)
+    written: list[str] = []
+    for entry in payload.get("files") or []:
+        name = entry.get("filename")
+        content = entry.get("content")
+        if name not in allowed or not isinstance(content, str):
+            continue
+        (workdir / name).write_text(content, encoding="utf-8")
+        written.append(name)
+
+    if not written:
+        raise ResponseError(
+            "the response contained none of the files the task asked for "
+            f"({', '.join(sorted(allowed))})"
+        )
+    return written
+
+
 class ModelAdapter:
     """Base class for adapters that call a hosted model."""
 
@@ -60,7 +168,3 @@ class ModelAdapter:
             "Run `scratchbench run --model reference` until it is written; "
             "see adapters/model_api.py for the contract."
         )
-
-
-class OpenAIAdapter(ModelAdapter):
-    name = "openai"
