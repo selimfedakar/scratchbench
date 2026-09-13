@@ -16,7 +16,14 @@ from .tasks import Task
 #: every tier. A version 1 file is still readable here and still means what it
 #: said: every published version 1 run was laptop-only, so its headline rate
 #: and its laptop rate are the same number.
-RESULTS_VERSION = 2
+#:
+#: Bumped to 3 when each task gained `failed_tests`, the node ids of the tests
+#: that failed. Versions 1 and 2 are still readable and every published file is
+#: one of them; what they do not carry is the *shape* of a failure, so a reader
+#: must treat a missing `failed_tests` as unknown rather than as empty. There is
+#: no way to backfill it — the names were never written down — which is the
+#: whole reason this exists (`docs/LESSONS.md` L45).
+RESULTS_VERSION = 3
 
 #: The tier the headline `pass_rate` is computed over, and the only one it is
 #: ever computed over. Every document in this repository says the leaderboard
@@ -29,6 +36,7 @@ __all__ = [
     "HEADLINE_TIER",
     "NO_EVIDENCE",
     "RESULTS_VERSION",
+    "cost_per_solved",
     "build_payload",
 ]
 
@@ -125,6 +133,11 @@ def build_payload(
                 "status": outcome.status,
                 "duration_s": round(outcome.duration_s, 2),
                 "counts": outcome.counts,
+                # The names behind `counts`, so the shape of a failure survives
+                # the run that produced it. Present and empty means the tests
+                # judged the solution and none failed; absent, in a version 1 or
+                # 2 file, means nobody recorded it.
+                "failed_tests": outcome.failed_tests,
                 "detail": outcome.detail,
             }
             for outcome in outcomes
@@ -298,6 +311,9 @@ def format_run(payload: dict) -> str:
     footer += f"  ·  {payload.get('attempts', 1)} attempt(s) per task"
     if payload.get("usd_cost") is not None:
         footer += f"  ·  ${payload['usd_cost']:.2f}"
+        per_solved = cost_per_solved(payload)
+        if per_solved is not None:
+            footer += f"  ·  ${per_solved:.3f}/solved"
     lines.append(footer)
     lines.append(
         "  ".join(
@@ -462,6 +478,34 @@ def headline_of(payload: dict) -> tuple[float | None, int, int]:
     return bucket["pass_rate"], bucket["solved"], measured
 
 
+def cost_per_solved(payload: dict) -> float | None:
+    """Dollars per task this run actually solved, or `None` when that is not a number.
+
+    Two models can both score 100% and be an order of magnitude apart in what it
+    cost, and that is an axis frontier models genuinely differ on. `V2_DESIGN.md`
+    §6-2.
+
+    Three cases return `None` rather than a figure, and they are different
+    questions wearing the same face. No cost recorded: the run was free or the
+    adapter reports nothing, and inventing zero would flatter it. Nothing
+    solved: the honest answer is that the run bought no solutions, and dividing
+    by it produces `inf`, which formats as a number and reads as a very bad
+    score rather than as no score. Nothing measured at all: there was no
+    denominator to begin with.
+
+    Solved is counted over the whole run rather than the headline tier, because
+    the cost is also the whole run's. A `needs_accelerator` task cost nothing
+    and solved nothing, so it moves neither side (`docs/LESSONS.md` L20).
+    """
+    usd = payload.get("usd_cost")
+    if usd is None:
+        return None
+    solved = sum(1 for entry in payload.get("tasks", []) if entry.get("passed"))
+    if solved == 0:
+        return None
+    return usd / solved
+
+
 def format_leaderboard(payloads: list[dict]) -> str:
     """Every run, most recent first, one row each."""
     if not payloads:
@@ -470,6 +514,7 @@ def format_leaderboard(payloads: list[dict]) -> str:
     rows = []
     for payload in reversed(payloads):
         rate, solved, measured = headline_of(payload)
+        per_solved = cost_per_solved(payload)
         rows.append(
             [
                 payload["model"],
@@ -477,10 +522,12 @@ def format_leaderboard(payloads: list[dict]) -> str:
                 f"{solved}/{measured}",
                 f"{payload['wall_clock_s']:.1f}s",
                 "-" if payload.get("usd_cost") is None else f"${payload['usd_cost']:.2f}",
+                "-" if per_solved is None else f"${per_solved:.3f}",
                 str(payload.get("task_set", "?")),
                 payload["run_at"],
             ]
         )
     return _table(
-        ["model", "pass rate", "solved", "wall clock", "cost", "set", "run at"], rows
+        ["model", "pass rate", "solved", "wall clock", "cost", "$/solved", "set", "run at"],
+        rows,
     )
