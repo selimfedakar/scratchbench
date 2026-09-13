@@ -427,6 +427,32 @@ hand-edited number fails the build the way a hand-edited cost already does.
 diff is empty; one existing published file is read back through the new reader
 to prove the older schema still loads.
 
+**Status, 2026-09-08.** 4.1 and 4.2 have landed. `parse_failed_tests` keeps the
+node ids off pytest's short summary, `Outcome.failed_tests` carries them, and
+`RESULTS_VERSION` is 3 — names only when the status is `failed`, so an absence of
+evidence never acquires a shape. `cost_per_solved` returns `None` for all three
+non-numbers (no cost, nothing solved, nothing measured) rather than `inf`. The
+harness suite is 120 passed, up from 110, and all 251 published files still read.
+Verified end to end against the real losing draw from session 17's sweep: 37
+names, and `chunk_sizes0` absent from them, which is the afternoon of hand-work
+that produced L45 reduced to one call. `cost_per_solved` returns `None` for all
+three non-numbers rather than `inf`.
+
+4.3 has landed too, and it found something on the way in. `tools/render_leaderboard.py`
+generates only the four table regions between `<!-- rendered: ... -->` markers and
+copies everything else through untouched; `--check` is a CI step beside
+`check_cost.py` and `check_calibration.py`. The first version filtered only
+`needs_accelerator` out of the denominator and disagreed with the hand-written
+page in two cells — `39/39` and `4/4`, and a draw count of 9 rather than 10. The
+page was right: `adapter_error`, `mps_stalled`, `collection_error` and
+`missing_deps` are absences too, and `timeout` is the one status that is both
+evidence and a failure. **A generator that reproduces a hand-written table is
+worth more than one that replaces it**, because the disagreement is the test.
+The gate was then verified by breaking a published number on purpose: `--check`
+exited 1, and exited 0 again once it was restored.
+
+**Section 4 is complete.** Harness suite 124 passed, up from 110.
+
 **Cost.** $0. No model is asked anything.
 
 ---
@@ -880,3 +906,100 @@ already uses, so §3 is unblocked and needs code rather than money. It stays
 after §4 in the order: a second provider multiplies the number of sweeps whose
 failures somebody has to read, and reading them by hand does not scale to two
 vendors.
+
+---
+
+## 10. The finish plan — four decisions taken 2026-09-08
+
+Session 17 ended with the project's one open-ended question closed by decision
+rather than by another candidate. What follows is the whole remaining path.
+Sections 4 through 7 stay as written; this section says which branch of each was
+taken and in what order, so no later session has to re-derive it.
+
+### 10.1 `v2` ships now, with per-tier reporting
+
+**Decision.** `v2` publishes with the four tasks it has — one laptop
+(`flash_attention_backward`), three accelerated — using §1.2's **option C
+reporting shape**: one headline number, and directly beneath it the tier
+breakdown with the hardware each task needs named.
+
+**Why this overrides §1.2's recommendation of option A.** §1.2 recommended
+holding `v2` back until its laptop half was a real set of three, and it was
+right on the evidence available then. Two measurements have happened since.
+Candidate 2 was invalid (L44). Candidate 3 was valid, satisfies both halves of
+§9.3's criterion by construction, and the frontier went 20/20 on its mechanism
+(L45). Three attempts have produced one discriminating laptop task, and the
+holding cost of a fourth is unbounded while its expected value is now measured
+rather than assumed. **Shipping a small honest set beats waiting for a large
+one**, provided the smallness is stated rather than hidden, which is exactly what
+option C's shape does.
+
+⛔ **What this does not license.** The headline must say, in the table and not
+only in prose, that the laptop half is one task. A reader who cannot see that
+from the leaderboard has been misled by omission, and that failure is worse than
+the one §1.2 was trying to avoid.
+
+### 10.2 The OpenAI adapter is in launch scope
+
+**Decision.** §3 ships before Show HN, after §4.
+
+**Why.** A benchmark whose every row is an Anthropic model reads as an Anthropic
+enthusiast's project, and this repository is the owner's public evidence. The
+credit is loaded and `OPENAI_API_KEY` is on the environment the adapters already
+read. **Why after §4 and not before:** a second provider doubles the number of
+failure shapes somebody has to read, and until §4.2 lands, reading them means
+hand-running pytest inside `--keep` directories.
+
+### 10.3 A rented CUDA box, for one session
+
+**Decision.** Rent an hourly GPU box and complete `fused_rmsnorm_kernel` at ten
+draws per model.
+
+**Why.** It is in `v2` today at `claude-opus-5` 1/5, `claude-haiku-4-5` 3/5, and
+**no `claude-sonnet-5` row at all**. Five draws is the floor the admission rule
+reads, and this repository's own rule is that five is not enough for
+calibration. Publishing a headline set containing a task calibrated at the floor
+with a model missing would break a rule stated in the README, in the headline
+that states it.
+
+### 10.4 Budget and shape of the remaining work
+
+**Decision.** About $40 and four working sessions, Show HN fifth. Spend is
+stated up front each session and approved before it is spent.
+
+| # | Section | What lands | Cost |
+|---|---|---|---|
+| ~~18~~ | ~~§4~~ | ✅ **landed 2026-09-08**, in session 17 | $0 |
+| ~~18~~ | ~~§3~~ | ✅ **landed 2026-09-08**, also in session 17, for $0.32 | $0 left |
+| 18 | §5 + §10.3 | rented CUDA box, `fused_rmsnorm_kernel` at 10 draws, the full `v2` sweep **across both vendors** | ~$30 + rental |
+| 19 | §6 | clean-clone test, README rewrite, claims audit, contamination answer | $0 |
+| 20 | §7 | Show HN | $0 |
+
+### 10.5 What the OpenAI adapter measured on its way in
+
+`adapters/openai_api.py` landed the same session, and its first draws are
+`docs/LESSONS.md` L46. `gpt-5.6-luna` at $0.20 per million solved all nine tasks
+it was asked, including `flash_attention_backward` and
+`metal_softmax_backward_kernel` — the two this repository relies on to separate
+models.
+
+**Nine of nine bounds its per-task rate on this set at 0.72 (one-sided 95%),**
+so the statement "the current tasks do not challenge this model" is supported
+rather than merely suspected. What the draws cannot do is rank it against Opus
+or Sonnet on any single task: Sonnet passes `flash_attention_backward` 8 times
+in 10, so one passing draw is what a Sonnet would most likely have produced too.
+No per-task rate is published from any of it.
+
+Three things follow and none is optional. **§5 sweeps both vendors**, so the
+first `v2` row is a field rather than a lab. **The announcement may not call the
+laptop tier discriminating without naming who it discriminates**, because every
+difficulty here was calibrated against three Claude models. And **§6's claims
+audit gains an item**: the README's difficulty numbers and the `warmup` label
+both mean "relative to the models that were asked", and neither currently says
+which models those were.
+
+**The one ordering constraint that is not negotiable.** §4 came first and
+everything else depended on it, which is why §3 was cheap to add on top of it the
+same day: the sweeps above print their own failure shapes now. §4, §3 and §10's
+decisions all landed in session 17; what remains is the rented box, the sweep,
+the hardening and the announcement.
