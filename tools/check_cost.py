@@ -28,7 +28,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from adapters.anthropic_api import price_from_counts  # noqa: E402
+from adapters import resolve  # noqa: E402
+
+
+def price_from_counts(model, *args, **kwargs):
+    """Re-derive a published cost using the price table of the model's own vendor.
+
+    Routed through `adapters.resolve` rather than a second prefix table here, so
+    a model that the runner can ask is a model this check can price, by
+    construction. A model with no adapter is `UNCHECKABLE` rather than free.
+    """
+    module = sys.modules[type(resolve(model)).__module__]
+    return module.price_from_counts(model, *args, **kwargs)
 
 TOLERANCE = 5e-7
 
