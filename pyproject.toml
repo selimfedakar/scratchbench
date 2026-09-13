@@ -27,6 +27,7 @@ dependencies = [
 # no key; installing an API client to do that would quietly contradict it.
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.60"]
+openai = ["openai>=3.0"]
 
 [project.urls]
 Homepage = "https://github.com/selimfedakar/scratchbench"
