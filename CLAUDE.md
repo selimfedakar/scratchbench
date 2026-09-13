@@ -216,6 +216,42 @@ set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
 
 ## State as of 2026-09-08, session 17 (verify before trusting)
 
+- ⭐ **The finish plan is `ROADMAP.md` §10, and it is four decisions rather than
+  an open question.** `v2` **ships now** with the four tasks it has, using
+  §1.2's option C reporting shape — one headline, tier breakdown beneath it,
+  hardware named. This overrides §1.2's recommendation of option A, and §10.1
+  gives the reason: three attempts produced one discriminating laptop task, so
+  a fourth has unbounded holding cost and measured-low expected value. ⛔ The
+  table itself must show that the laptop half is one task; hiding it in prose is
+  worse than the failure option A was avoiding. The OpenAI adapter is **in**
+  launch scope, a CUDA box gets **rented** for one session to finish
+  `fused_rmsnorm_kernel` at ten draws, budget ~$40 over four sessions plus Show
+  HN. ✅ **§4 and §3 both landed in this same session**, so the next one is §5:
+  the rented CUDA box and the first `v2` sweep, now across both vendors.
+- 🔴 **The OpenAI adapter's first draws changed the framing (L46).**
+  `gpt-5.6-luna`, $0.20 per million, solved **all nine tasks it was asked** for
+  about three cents: every one of `v1`, `chunked_batchnorm_reduction` (Haiku
+  0/10), `flash_attention_backward` (the only laptop task separating two
+  frontier Claudes), and `metal_softmax_backward_kernel` (Sonnet 6/10).
+  **9 of 9 bounds its per-task rate on this set at 0.72, one-sided 95%** — the
+  set genuinely does not challenge it. ⚠ It does **not** rank it against Opus or
+  Sonnet: Sonnet passes `flash_attention_backward` 8 times in 10, so one passing
+  draw is unremarkable. No per-task rate is published. ⛔ **Every
+  difficulty in this repository was calibrated against three Claude models**, so
+  `warmup` means "the frontier clears this" for one lab's frontier. §5 sweeps
+  both vendors and the announcement may not call the laptop tier discriminating
+  without naming who it discriminates (`ROADMAP.md` §10.5).
+- ⚠ **The adapter's own error paths are covered by fakes, not by live calls.**
+  Refusal, `incomplete`, and model substitution have unit tests; no live OpenAI
+  request has produced any of them, and **no graded OpenAI failure has been
+  observed at all**, because nothing failed. `failed_tests` is vendor-neutral by
+  construction — it is parsed in `runner/sandbox.py`, never in an adapter.
+- ⚠ **This machine needed two package fixes before any OpenAI call worked**, and
+  neither is a repository problem: anaconda's `brotlipy 0.7.0` shadows the
+  `brotli` import name with an API `httpx2` cannot use (replaced with `Brotli`),
+  and `zstandard` was upgraded on the way to diagnosing it. Symptom is a
+  misleading `APIConnectionError`.
+
 - **Candidate 3's sweep is finished and the task is `warmup`.**
   `chunked_batchnorm_reduction`, thirty draws in `calibration/`:
   `claude-opus-5` **9/10**, `claude-sonnet-5` **10/10**, `claude-haiku-4-5`
