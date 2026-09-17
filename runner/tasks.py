@@ -46,6 +46,7 @@ REQUIRED_META_KEYS = {
     "deps",
     "added",
     "frozen_set",
+    "hidden_tests",
 }
 
 #: A numbered frozen set from v2 onward is calibrated against models before
@@ -106,6 +107,9 @@ class Task:
     deps: tuple[str, ...]
     added: str
     frozen_set: str
+    #: Declared, and re-derived by `validate` on any machine that can run the
+    #: task. See the note in `load_task`.
+    hidden_tests: int
     path: Path
     tier: str = "laptop"
     accelerator: str | None = None
@@ -202,6 +206,20 @@ def load_task(path: Path) -> Task:
             f"{meta_path}: time_limit_s must be 1..{MAX_TIME_LIMIT_S}, got {meta['time_limit_s']}"
         )
 
+    # How many hidden tests this task has, declared here rather than counted at
+    # render time. Counting means importing the task's dependencies, and
+    # `fused_rmsnorm_kernel` needs triton — which has no macOS wheel and is not
+    # installed on a CPU-only CI runner. A count that can only be derived on
+    # some machines is the same defect as a test that only passes on some
+    # machines (docs/LESSONS.md L47), so the number is checked in as evidence
+    # and `scratchbench validate` re-derives it wherever the task can actually
+    # run. Absent hardware or absent dependencies leave it unchecked rather than
+    # wrong, which is the rule one column over.
+    if not isinstance(meta["hidden_tests"], int) or meta["hidden_tests"] <= 0:
+        raise TaskError(
+            f"{meta_path}: hidden_tests must be a positive integer, got {meta['hidden_tests']!r}"
+        )
+
     calibration = _load_calibration(meta_path, meta.get("calibration"))
     _check_admission(meta_path, str(meta["frozen_set"]), calibration)
 
@@ -216,6 +234,7 @@ def load_task(path: Path) -> Task:
         deps=tuple(meta["deps"] or ()),
         added=str(meta["added"]),
         frozen_set=str(meta["frozen_set"]),
+        hidden_tests=int(meta["hidden_tests"]),
         path=path,
         tier=tier,
         accelerator=accelerator,
