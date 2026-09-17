@@ -61,12 +61,41 @@ GROUPS: dict[str, frozenset[str]] = {
     ),
     "metal-cross-entropy": frozenset({"metal_cross_entropy_kernel"}),
     "cuda-rmsnorm": frozenset({"fused_rmsnorm_kernel"}),
+    # The first `v2` sweep, and the only group here whose draws come off two
+    # different machines. `v2` spans three kinds of hardware, so one sweep
+    # cannot run on one box: this is the Mac half, where the CUDA member comes
+    # back `needs_accelerator` and is dropped by `graded()` rather than scored
+    # as a loss. The Triton member's own draws are the `cuda-rmsnorm` region,
+    # taken on a rented box, and the page says so where the rows are.
+    #
+    # ⚠ These four slugs are `v2` **as it stood on 2026-09-17**, which is what
+    # the draws in this group actually measured. `flash_attention_backward` left
+    # for `warmup` on the strength of this very sweep (ROADMAP §11), so a later
+    # `--set v2` run writes three slugs and will not match here. That is correct
+    # rather than a bug: the key is a claim about what was measured, and these
+    # files measured four tasks. A future sweep is a new region, not an edit to
+    # this one.
+    "v2-mac": frozenset(
+        {
+            "flash_attention_backward",
+            "fused_rmsnorm_kernel",
+            "metal_cross_entropy_kernel",
+            "metal_softmax_backward_kernel",
+        }
+    ),
 }
 
 #: The order models appear in, strongest first. Written down rather than sorted,
 #: because sorting by pass rate would reorder the table every time a sweep moves
 #: a number and make every diff unreadable.
-MODEL_ORDER = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]
+MODEL_ORDER = [
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+]
 
 
 def load(group: str) -> list[dict]:
@@ -212,6 +241,13 @@ def task_table(payloads: list[dict]) -> str:
                 for entry in graded(payload)
                 if entry["slug"] == slug
             ]
+            if not entries:
+                # No graded draw at all — every one was an absence, which on
+                # this page means the machine could not run the task. `0/0` is
+                # arithmetically true and reads as "failed everything", so the
+                # cell says nothing instead of saying zero (docs/LESSONS.md L20).
+                cells.append("–")
+                continue
             k = sum(1 for entry in entries if entry["passed"])
             cell = f"{k}/{len(entries)}"
             # Bold marks a mixed result: the only cells where the draw-to-draw
@@ -226,6 +262,8 @@ RENDERERS = {
     "laptop-v1-by-task": task_table,
     "metal-cross-entropy": model_table,
     "cuda-rmsnorm": model_table,
+    "v2-mac": model_table,
+    "v2-mac-by-task": task_table,
 }
 
 
