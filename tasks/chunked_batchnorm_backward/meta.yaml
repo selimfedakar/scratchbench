@@ -13,6 +13,7 @@ time_limit_s: 180
 tier: laptop
 requires_gpu: false
 deps: [torch]
+hidden_tests: 44
 added: 2026-09-04
 # Written 2026-09-04 as laptop candidate 2, against docs/LESSONS.md L28's
 # mechanism rather than V2_DESIGN.md 2.0's hazard clause. Selim chose that on
