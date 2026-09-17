@@ -10,5 +10,6 @@ probes: >
 time_limit_s: 60
 requires_gpu: false
 deps: []
+hidden_tests: 30
 added: 2026-07-26
 frozen_set: v1
