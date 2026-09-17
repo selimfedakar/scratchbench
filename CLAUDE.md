@@ -214,6 +214,59 @@ folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
 
+## State as of 2026-09-17, session 18 (verify before trusting)
+
+- 🔴 **CI had been red since 2026-09-08, three pushes, and nobody looked.** One
+  test asserted against the machine it ran on rather than the mechanism it was
+  written to check, so it passed on this Mac and failed on every GPU-less
+  runner. Fixed, verified by running the whole suite against a forced no-GPU
+  plugin (**131 passed**), and green. `docs/LESSONS.md` **L47**. ⛳ **Run
+  `gh run list --limit 3` at the START of a session, not the end.**
+- ⭐ **The first `v2` sweep is done and it removed `v2`'s laptop task.** Six
+  models, ten draws each, both vendors, sixty draws, **$8.4807**.
+  `flash_attention_backward` went Opus 10/10, Sonnet **10/10**, `gpt-5.6-sol`
+  10/10, `gpt-5.6-terra` 10/10 — cumulatively Opus 25/25 and two OpenAI models
+  at the ceiling — so `_check_admission` refuses it and it is **`warmup`** now.
+  The rule that admitted it in August removed it in September on fresh draws.
+  ⛔ **`v2` therefore ships as three accelerated tasks with NO laptop member**,
+  and the page says so in those words. Decision and the three rejected
+  alternatives: `docs/ROADMAP.md` **§11**. The rejected one worth remembering is
+  leaving OpenAI out of the calibration blocks — that keeps the task by choosing
+  which evidence counts after seeing which way it went (L21, L35, L43).
+- ⭐ **Both Metal tasks now carry six models at six distinct rates**, and the
+  failure shapes say what the rates cannot: every failing instance clusters on
+  threadgroup sizes 7, 33 and 96, and **`claude-sonnet-5` fails only there and
+  never at 1, 32 or 1024**. That is exactly the hazard both tasks were built
+  around — first time a task here is shown to measure its own `probes:` claim
+  out of the shapes rather than out of my description.
+- 🔴 **`meta.yaml` gained a required key, `hidden_tests`, and the reason is a
+  near-miss.** The README's counts are now generated (`tools/render_readme.py`,
+  CI-gated) because §6.3's audit found **eight stale numbers**, every one correct
+  when typed. The first renderer counted tests by collecting them — which works
+  here and crashes on CI, because `fused_rmsnorm_kernel` imports triton and there
+  is no macOS wheel and no triton on a CPU runner. **That is L47 rebuilt by the
+  tool written to prevent its cousin.** The count is checked in as evidence and
+  `validate` re-derives it wherever the task can run. Total **805**.
+- 🔴 **`collection_error` could be published for a machine problem (L48).**
+  `starter_collects_cleanly` returned a bool for a three-answer question: a
+  baseline that *never ran* because every attempt stalled returned the same
+  `False` as one that genuinely could not collect, so the run was published as
+  `BROKEN` — the alarm meaning every number measured against that task is void.
+  Now `bool | None`, `None` → `mps_stalled`. ⭐ **Confirmed in the field six
+  times**: `gpt-5.6-luna` produced six `mps_stalled` draws after the fix and no
+  `collection_error` has appeared since. ⛔ The two historical `collection_error`
+  draws are **not relabelled** — that is L43, and it does not become acceptable
+  because the rewrite would flatter my own diagnosis.
+- ⚠ **`test_validate_does_not_count_what_it_could_not_run` runs real `validate`
+  over every task**, so it dispatches Metal and collides with anything else using
+  the GPU. It fails on this machine whenever a sweep is in flight or the GPU is
+  left stalled; it is fine on CI, where the Metal tasks are `UNCHECKED`. Do not
+  run the suite during a sweep.
+- ⏳ **Still open:** the rented CUDA box (`~/scratchbench-CUDA-KUTUSU-KOS.sh`) for
+  `fused_rmsnorm_kernel` at ten draws — now **one of `v2`'s three members**, so it
+  matters more than it did. And §6.1's clean-clone test, which has still never
+  been run and needs a push first (`~/scratchbench-clean-clone-test.sh`).
+
 ## State as of 2026-09-08, session 17 (verify before trusting)
 
 - ⭐ **The finish plan is `ROADMAP.md` §10, and it is four decisions rather than
