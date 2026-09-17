@@ -1,13 +1,109 @@
-# Leaderboard — task set v1
+# Leaderboard
 
-Every row is five independent draws unless it says otherwise. They are repeated
-samples, not retries: no draw sees another's results and each task gets one
-attempt. Every results file a row was computed from is checked in beside this
-page, so nothing here has to be taken on trust.
+Two task sets: **`v2`**, swept on 2026-09-17 across two vendors at ten draws per
+model, and **`v1`**, the original laptop set, at five. Rows say which.
+
+Every row is repeated independent samples, not retries: no draw sees another's
+results and each task gets one attempt. Every results file a row was computed
+from is checked in beside this page, so nothing here has to be taken on trust.
 
 Two tiers, reported separately and never folded together. `laptop` is the
 headline: no GPU, reproducible by anyone with a clone and an API key.
 `accelerated` needs the hardware it names.
+
+---
+
+# Task set v2 — three tasks, all accelerated
+
+**`v2` has no laptop member, and that is the result rather than an omission.**
+It had one, `flash_attention_backward`, and the sweep below is what removed it:
+`claude-opus-5`, `gpt-5.6-sol` and `gpt-5.6-terra` each solved it ten times out
+of ten and `claude-sonnet-5`'s two historical losses did not repeat, so the
+admission rule refuses it and it is `warmup` now. The laptop tier is saturated
+at the top **for two labs' frontier models**, measured rather than suspected.
+`../docs/ROADMAP.md` §11 has the decision and the three alternatives it rejects.
+
+So the headline laptop rate for `v2` is not 100%. There is no laptop rate at
+all, and a tier with no members does not get a number invented for it.
+
+⚠ `v2` spans three kinds of machine, so one sweep cannot run on one box. The
+table below is the **Mac half** — an M1 Pro, laptop tier plus both Metal tasks —
+where the CUDA member returns `needs_accelerator` and is dropped rather than
+scored as a loss. The Triton member's own draws are further down, taken on a
+rented box.
+
+## Mac half — ten draws per model, 2026-09-17
+
+<!-- rendered: v2-mac -->
+| Model | Pass rate | Draws | Solved | Cost per draw | $ per solved | Wall clock | Attempts |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `claude-opus-5` | **90%**, 67% to 100% by draw | 10 | 27/30 | $0.279 to $0.432 | $0.093 to $0.198 | 114 to 192s | 1 |
+| `claude-sonnet-5` | **77%**, 33% to 100% by draw | 10 | 23/30 | $0.129 to $0.235 | $0.051 to $0.160 | 76 to 146s | 1 |
+| `claude-haiku-4-5` | **11%**, 0% to 50% by draw | 10 | 3/28 | $0.026 to $0.044 | $0.026 to $0.037 | 53 to 649s | 1 |
+| `gpt-5.6-sol` | **80%**, 33% to 100% by draw | 10 | 24/30 | $0.161 to $0.216 | $0.054 to $0.208 | 136 to 489s | 1 |
+| `gpt-5.6-terra` | **93%**, 67% to 100% by draw | 10 | 28/30 | $0.085 to $0.126 | $0.028 to $0.053 | 111 to 146s | 1 |
+| `gpt-5.6-luna` | **67%**, 0% to 100% by draw | 10 | 16/24 | $0.010 to $0.012 | $0.004 to $0.011 | 108 to 415s | 1 |
+<!-- /rendered -->
+
+### Task by task, k out of n draws
+
+The denominator is per cell. A draw that produced no evidence about a task
+shortens that cell alone rather than the column, because an absence scored as a
+loss is a published zero nobody earned.
+
+Two rows need a word. `fused_rmsnorm_kernel` is `–` rather than `0/0` in every
+column: it wants CUDA, this is a Mac, and nothing about any model was measured —
+its own draws are the CUDA section below. And `flash_attention_backward` is here
+because **this sweep measured it**, not because it is still a `v2` member; these
+are the draws that removed it. Reporting the sweep as it ran and the set as it
+now stands is the honest pair, and dropping the row would hide the evidence for
+the decision it produced.
+
+<!-- rendered: v2-mac-by-task -->
+| Task | Difficulty | `claude-opus-5` | `claude-sonnet-5` | `claude-haiku-4-5` | `gpt-5.6-sol` | `gpt-5.6-terra` | `gpt-5.6-luna` |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `fused_rmsnorm_kernel` | 4 | – | – | – | – | – | – |
+| `metal_cross_entropy_kernel` | 4 | **9/10** | **7/10** | **1/10** | **7/10** | **9/10** | **3/7** |
+| `metal_softmax_backward_kernel` | 4 | **8/10** | **6/10** | 0/8 | **7/10** | **9/10** | **4/7** |
+| `flash_attention_backward` | 5 | 10/10 | 10/10 | **2/10** | 10/10 | 10/10 | **9/10** |
+<!-- /rendered -->
+
+### The shape underneath, which no rate carries
+
+Both Metal tasks launch at a threadgroup size the kernel does not choose:
+`1, 7, 32, 33, 96, 1024`. Every failing test instance across both tasks and all
+six models, grouped by that size:
+
+```
+   size     1:    4
+   size     7:   44  <- not a power of two
+   size    32:    8
+   size    33:   45  <- not a power of two
+   size    96:   56  <- not a power of two
+   size  1024:    8
+```
+
+`claude-sonnet-5` fails **only** at 7, 33 and 96, and never once at 1, 32 or
+1024. That is exactly the hazard both tasks were built around — a fold that has
+to survive a group size which is neither a power of two nor a multiple of the
+32-lane simdgroup width. It is the first time a task here has been shown to
+measure the thing its `probes:` field claims, out of the failure shapes rather
+than out of the author's description of it.
+
+The frontier's losses sort into three kinds, and a wrong reduction on easy
+geometry is not among them: a compile error on `half`, a kernel that runs until
+the time limit kills it, and Sonnet's non-power-of-two fold.
+
+⚠ **Six draws produced no evidence and are in neither side of any rate.**
+`gpt-5.6-luna` hit `mps_stalled` three times on each Metal task: this laptop
+puts every other process that touches `torch.mps` into a stall for the life of
+that process, and the guard in `runner/mps_stall.py` exists so that such a run
+is recorded as an absence instead of as a `timeout` the model would be blamed
+for. `../docs/LESSONS.md` L42 and L48.
+
+---
+
+# Task set v1
 
 ## Laptop tier — 8 tasks, 308 hidden tests
 
@@ -306,7 +402,7 @@ it, and CI checks it on every push:
 ```
 $ python tools/check_cost.py
 ...
-22 file(s) checked: every cost reproduces from its own tokens.
+251 file(s) checked: every cost reproduces from its own tokens.
 ```
 
 The whole of this page cost **$3.30**: $2.64 for Opus on the laptop tier, $0.34
