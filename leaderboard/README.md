@@ -94,6 +94,25 @@ The frontier's losses sort into three kinds, and a wrong reduction on easy
 geometry is not among them: a compile error on `half`, a kernel that runs until
 the time limit kills it, and Sonnet's non-power-of-two fold.
 
+⚠ **The three OpenAI cost columns are warm-cache prices, and yours will be
+higher.** OpenAI caches long prompt prefixes automatically, with nothing to opt
+into and nothing in the request that asks for it. Nine of every ten draws above
+read about **90% of their prompt tokens from that cache**, so the published cost
+is what the *tenth* run of a sweep costs rather than the first:
+
+| model | published | same draws, cold cache | difference |
+|---|---:|---:|---:|
+| `gpt-5.6-sol` | $1.9199 | $2.0450 | 6.1% |
+| `gpt-5.6-terra` | $1.0109 | $1.0735 | 5.8% |
+| `gpt-5.6-luna` | $0.1091 | $0.1153 | 5.4% |
+
+Output tokens dominate the bill, which is why 90% of the prompt costs 6% of the
+total. The Anthropic rows have no such asterisk: caching there is opt-in, this
+adapter never asks for it, and all 86 Claude draws read zero cached tokens. The
+asymmetry is a fact about the two APIs rather than a choice made here, and it is
+on the page because a cost nobody else can reproduce is the thing this page
+exists not to publish.
+
 ⚠ **Six draws produced no evidence and are in neither side of any rate.**
 `gpt-5.6-luna` hit `mps_stalled` three times on each Metal task: this laptop
 puts every other process that touches `torch.mps` into a stall for the life of
