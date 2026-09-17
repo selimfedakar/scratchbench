@@ -1003,3 +1003,106 @@ everything else depended on it, which is why §3 was cheap to add on top of it t
 same day: the sweeps above print their own failure shapes now. §4, §3 and §10's
 decisions all landed in session 17; what remains is the rented box, the sweep,
 the hardening and the announcement.
+
+---
+
+## 11. What the sweep did to §10.1, decided 2026-09-17
+
+§10.1 committed `v2` to shipping "with the four tasks it has", and stated that
+the table must not hide the fact that its laptop half is a single task. The
+sweep ran, and the single task is no longer a member. This section records the
+decision rather than quietly editing §10.1, because §10.1 was right on the
+evidence it had.
+
+### 11.1 The rule refused `flash_attention_backward`, on its own numbers
+
+`v2`'s laptop member entered the set on 2026-08-17 because it was the one laptop
+task separating two frontier Claude models: Opus 15/15 against Sonnet 8/10. Ten
+fresh draws per model, plus a second vendor:
+
+| model | before | this sweep | total | rate |
+|---|---|---|---|---|
+| `claude-opus-5` | 15/15 | 10/10 | **25/25** | 100% |
+| `claude-sonnet-5` | 8/10 | 10/10 | **18/20** | 90% |
+| `gpt-5.6-sol` | — | 10/10 | **10/10** | 100% |
+| `claude-haiku-4-5` | 3/19 | 2/10 | 5/29 | 17% |
+
+`_check_admission` reads the top two measured entries and refuses a task both
+clear. Those are now `claude-opus-5` at 100% and `gpt-5.6-sol` at 100%, so the
+task is refused from any numbered set. **Sonnet's two historical losses were the
+only thing keeping it in, and they did not repeat.**
+
+### 11.2 The decision: publish it, do not work around it
+
+`flash_attention_backward` moves to `frozen_set: warmup`. **`v2` therefore ships
+as three accelerated tasks with no laptop member at all**, and the page says so
+in those words.
+
+Three alternatives were considered and rejected, and the reasons matter more
+than the choice:
+
+- **Omit the OpenAI models from the calibration blocks.** This works
+  mechanically — `check_calibration.py` validates the models a block names, so
+  a block that never names `gpt-5.6-sol` still re-derives. It is also exactly
+  the move L21, L35 and L43 are each about: deciding which evidence counts
+  toward admission *after* seeing which way it went. A rule that only reads the
+  vendor whose numbers suit the set is not a rule.
+- **Delay and write a fourth laptop candidate.** §10.1 already priced this: three
+  attempts produced one discriminating laptop task, so a fourth has unbounded
+  holding cost against measured-low expected value. Nothing in this sweep
+  changes that arithmetic, and one more attempt would now have to discriminate
+  across *two* vendors rather than one.
+- **Change the admission rule.** The rule was already rewritten once after it
+  refused a task its author liked (L35), and that entry sets the condition for
+  touching it again: a model between Sonnet and Opus. That has not happened.
+  Rewriting it a second time, to admit a task it refused on a second vendor's
+  evidence, would retire the rule rather than amend it.
+
+### 11.3 What this does to the headline, and why it is not a downgrade
+
+`HEADLINE_TIER` is the laptop tier, so a `--set v2` sweep now reports a null
+headline and an accelerated rate beside it. That is the tier machinery working:
+a tier with no members has no rate, and inventing one by promoting the
+accelerated number into the headline slot is the exact defect L23 closed.
+
+The honest framing is also the more interesting one. **The laptop tier is
+saturated at the top for two vendors' frontier models, measured rather than
+suspected**, and the tier that still discriminates needs hardware. `v1` remains
+published and remains the laptop set — dated, frozen, and now with a stated
+reason it stopped measuring.
+
+And the accelerated tier discriminates across both vendors rather than one:
+
+| task | Opus 5 | Sonnet 5 | `gpt-5.6-sol` | Haiku 4.5 |
+|---|---|---|---|---|
+| `metal_cross_entropy_kernel` | 23/30 | 19/30 | 7/10 | 4/29 |
+| `metal_softmax_backward_kernel` | 16/20 | 12/20 | 7/10 | 2/18 |
+
+### 11.4 The shape underneath, which the rates do not carry
+
+Every failing test instance on both Metal tasks, grouped by the threadgroup size
+the launch geometry chose:
+
+```
+   size     1:    4
+   size     7:   44  <- not a power of two
+   size    32:    8
+   size    33:   45  <- not a power of two
+   size    96:   56  <- not a power of two
+   size  1024:    8
+```
+
+`claude-sonnet-5` fails **only** at 7, 33 and 96, and never once at 1, 32 or
+1024. That is precisely the hazard both tasks were built around — a fold that
+has to survive a group size which is neither a power of two nor a multiple of
+the 32-lane simdgroup width — and it is the first time a task in this repository
+has been shown to measure the thing its `probes:` field claims, from the failure
+shapes rather than from the author's description.
+
+The frontier's losses sort into three kinds and none of them is a wrong
+reduction on easy geometry: a compile error on `half`, a kernel that hangs until
+the time limit, and Sonnet's non-power-of-two fold.
+
+**Done when.** `flash_attention_backward` is `warmup`, every calibration block
+re-derives including both vendors, and the leaderboard carries a `v2` section
+whose laptop line says "no members" rather than "100%".
