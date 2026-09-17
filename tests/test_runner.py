@@ -792,6 +792,12 @@ def test_every_attempt_stalling_is_reported_as_no_evidence(monkeypatch):
         return STALLED_EXIT, "", 0.1
 
     monkeypatch.setattr(sandbox, "run_pytest", always_stalled)
+    # The stall is a property of the task's guard, not of the machine running
+    # the suite: `GUARDED_ACCELERATORS` is keyed on `task.accelerator`. Without
+    # this, `grade` returns `needs_accelerator` off the hardware gate before it
+    # ever reaches the mechanism under test, so the assertion below would pass
+    # on an Apple machine and fail on every GPU-less CI runner.
+    monkeypatch.setattr(sandbox, "available_accelerators", lambda: {"metal"})
     task = load_task(TASKS_ROOT / "metal_cross_entropy_kernel")
     outcome = sandbox.grade(task, reference_solve)
 
