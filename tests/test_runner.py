@@ -118,6 +118,7 @@ requires_gpu: false
 deps: []
 added: 2026-07-26
 frozen_set: test
+hidden_tests: 1
 """
 
 
@@ -1838,3 +1839,193 @@ def test_both_vendors_are_asked_the_same_question():
     assert openai_api.build_prompt is model_api.build_prompt
     assert anthropic_api.SYSTEM_PROMPT is openai_api.SYSTEM_PROMPT
     assert anthropic_api.response_schema is openai_api.response_schema
+
+
+# -- the README's derived counts ------------------------------------------
+
+
+def _readme_renderer():
+    import importlib.util
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "render_readme", root / "tools" / "render_readme.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _real_tasks_and_fake_counts():
+    from runner.tasks import discover_tasks
+
+    tasks = sorted(discover_tasks(TASKS_ROOT), key=lambda t: t.slug)
+    # Collecting the real hidden tests means seventeen pytest subprocesses, and
+    # CI already runs the tool itself. These tests are about the rendering, so
+    # the counts are stubbed and the number is never asserted on.
+    return tasks, {task.slug: 1 for task in tasks}
+
+
+def test_the_readme_counts_split_the_tiers_rather_than_summing_them():
+    # The sentence this replaces said "thirteen laptop, three GPU" while the
+    # directories said fourteen and three. Whatever it says now has to come
+    # from the directories.
+    rr = _readme_renderer()
+    tasks, counts = _real_tasks_and_fake_counts()
+    laptop = sum(1 for t in tasks if t.tier == "laptop")
+    accelerated = len(tasks) - laptop
+
+    sentence = rr.task_counts(tasks, counts)
+    assert rr.spell(len(tasks)) in sentence
+    assert rr.spell(laptop) in sentence
+    assert rr.spell(accelerated).lower() in sentence
+    # The headline rate is the laptop tier alone, so the two must never be
+    # added together anywhere on the page.
+    assert rr.spell(len(tasks)) != rr.spell(laptop)
+
+
+def test_every_task_appears_in_the_generated_table():
+    # The failure being prevented: the hand-written table was missing three
+    # tasks, and a reader counting rows would have got the wrong total.
+    rr = _readme_renderer()
+    tasks, counts = _real_tasks_and_fake_counts()
+    table = rr.task_table(tasks, counts)
+    for task in tasks:
+        assert f"`{task.slug}`" in table
+
+
+def test_a_difficulty_is_published_beside_the_models_it_was_measured_against():
+    # L46. A difficulty here is a statement about the models that were asked,
+    # and for most of this repository's history those were three Claudes. A
+    # number without that column invites the reader to generalise it.
+    rr = _readme_renderer()
+    tasks, counts = _real_tasks_and_fake_counts()
+    table = rr.task_table(tasks, counts)
+
+    calibrated = [t for t in tasks if t.calibration]
+    assert calibrated, "expected at least one calibrated task"
+    for task in calibrated:
+        for entry in task.calibration:
+            assert f"`{entry.model}` {entry.passed}/{entry.draws}" in table
+
+
+def test_an_uncalibrated_task_says_so_instead_of_leaving_the_cell_empty():
+    # An empty cell reads as "nothing to report". The v1 tasks predate the
+    # calibration machinery, so their difficulty is still the author's opinion
+    # and the table has to admit it (L21).
+    rr = _readme_renderer()
+    tasks, counts = _real_tasks_and_fake_counts()
+    uncalibrated = [t for t in tasks if not t.calibration]
+    assert uncalibrated, "expected at least one task with no calibration block"
+
+    table = rr.task_table(tasks, counts)
+    for task in uncalibrated:
+        row = next(line for line in table.splitlines() if f"`{task.slug}`" in line)
+        assert "not calibrated" in row
+
+
+def test_only_the_marked_regions_of_the_readme_are_generated():
+    # Same contract as the leaderboard renderer: the prose is the part worth
+    # reading and no generator has an opinion about it.
+    rr = _readme_renderer()
+    page = rr.PAGE.read_text(encoding="utf-8")
+    assert rr.REGION.search(page), "README.md has no rendered regions"
+
+    replaced = rr.REGION.sub(
+        lambda m: f"{m.group('open')}STUB\n{m.group('close')}", page
+    )
+    outside = rr.REGION.sub("<<region>>", page)
+    assert rr.REGION.sub("<<region>>", replaced) == outside
+
+
+def test_every_readme_region_has_a_renderer():
+    # A marker with no renderer behind it would silently keep whatever a human
+    # last typed there, which is the exact failure the tool exists to stop.
+    rr = _readme_renderer()
+    page = rr.PAGE.read_text(encoding="utf-8")
+    names = [match.group("name") for match in rr.REGION.finditer(page)]
+    assert names
+    assert all(name in rr.RENDERERS for name in names)
+
+
+def test_a_baseline_that_stalled_is_not_reported_as_a_broken_task(monkeypatch):
+    # `starter_collects_cleanly` decides which side of the evidence line a
+    # collection error falls on, and it answers with a bool. A baseline run
+    # that stalled out returns the same False as a baseline that genuinely
+    # could not collect, so the machine's state gets published as a statement
+    # about the task: status `collection_error`, printed label BROKEN.
+    #
+    # Both are NO_EVIDENCE, so no rate moves. What moves is the meaning — and
+    # "this task is broken" is the one alarm this repository must not cry wolf
+    # on, because it is the alarm that says every number measured against the
+    # task is void.
+    from runner import sandbox
+    from runner.mps_stall import STALLED_EXIT
+
+    assert STALLED_EXIT != sandbox.PYTEST_TESTS_FAILED
+
+    # The graded run has to reach the attribution seam rather than stall itself,
+    # so it returns pytest's collection-error code and only the baseline stalls.
+    calls = {"n": 0}
+
+    def graded_errors_then_baseline_stalls(workdir, timeout_s, guarded=False):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return 2, "1 error in 0.10s", 0.1
+        return STALLED_EXIT, "", 0.1
+
+    monkeypatch.setattr(sandbox, "run_pytest", graded_errors_then_baseline_stalls)
+    monkeypatch.setattr(sandbox, "available_accelerators", lambda: {"metal"})
+    task = load_task(TASKS_ROOT / "metal_softmax_backward_kernel")
+
+    outcome = sandbox.grade(task, leave_alone)
+    assert outcome.status == "mps_stalled", (
+        "a stalled baseline was published as a verdict on the task"
+    )
+    assert outcome.status in sandbox.NO_EVIDENCE
+    assert "stalled" in outcome.detail
+
+
+def test_a_baseline_that_genuinely_does_not_collect_still_says_the_task_is_broken(
+    monkeypatch, tmp_path
+):
+    # The other side of the same seam. Widening `collection_error` into a
+    # stall bucket would be the opposite failure: a genuinely broken task
+    # reported as a machine problem, which is how a benchmark keeps publishing
+    # numbers measured against a suite that no longer collects.
+    from runner import sandbox
+
+    path = make_task(
+        tmp_path,
+        slug="broken_task",
+        test_body="import nonexistent_module\n\ndef test_it():\n    assert True\n",
+    )
+    task = load_task(path)
+    outcome = sandbox.grade(task, reference_solve)
+
+    assert outcome.status == "collection_error"
+    assert outcome.status in sandbox.NO_EVIDENCE
+
+
+def test_the_spelled_counts_match_how_the_page_writes_them():
+    # The page spells its counts out. Comparing against digits would pass on a
+    # sentence no reader would ever see.
+    rr = _readme_renderer()
+    assert rr.spell(3) == "Three"
+    assert rr.spell(17) == "Seventeen"
+    assert rr.spell(20) == "Twenty"
+    assert rr.spell(48) == "Forty-eight"
+    assert rr.spell(53) == "Fifty-three"
+
+
+def test_a_stale_count_inside_a_sentence_fails_the_check():
+    # "Forty-four entries" sat on the front page for three sessions while the
+    # file held forty-six. Generating the whole sentence would mean generating
+    # prose, so the number is checked in place instead.
+    rr = _readme_renderer()
+    assert rr.check_prose(rr.PAGE.read_text()) == []
+
+    stale = rr.PAGE.read_text().replace(
+        rr.prose_counts()[0][1], "Forty-four entries"
+    )
+    assert rr.check_prose(stale), "a wrong lessons count passed the check"
