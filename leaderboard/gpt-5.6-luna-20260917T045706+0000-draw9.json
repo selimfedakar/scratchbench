@@ -1,0 +1,139 @@
+{
+  "results_version": 3,
+  "harness_version": "0.1.0",
+  "model": "gpt-5.6-luna",
+  "run_at": "2026-09-17T04:57:06+00:00",
+  "task_set": "v2",
+  "headline_tier": "laptop",
+  "pass_rate": 0.0,
+  "measured": 1,
+  "not_measured": 3,
+  "pass_rate_by_category": {
+    "attention": 0.0
+  },
+  "pass_rate_by_tier": {
+    "accelerated": {
+      "pass_rate": null,
+      "solved": 0,
+      "measured": 0,
+      "total": 3,
+      "no_accelerator": 1,
+      "no_evidence": 3,
+      "categories": {}
+    },
+    "laptop": {
+      "pass_rate": 0.0,
+      "solved": 0,
+      "measured": 1,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "attention": 0.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "gpt-5.6-luna-20260917T041929",
+    "index": 9,
+    "of": 10
+  },
+  "wall_clock_s": 142.0,
+  "usd_cost": 0.01184,
+  "tokens": {
+    "input": 3871,
+    "output": 9801,
+    "cache_read": 3862,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "flash_attention_backward",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 5,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 1.39,
+      "counts": {
+        "failed": 26,
+        "passed": 23
+      },
+      "failed_tests": [
+        "test_flash_backward.py::test_matches_autograd[True-1]",
+        "test_flash_backward.py::test_matches_autograd[True-2]",
+        "test_flash_backward.py::test_matches_autograd[True-3]",
+        "test_flash_backward.py::test_matches_autograd[True-4]",
+        "test_flash_backward.py::test_matches_autograd[True-5]",
+        "test_flash_backward.py::test_matches_autograd[True-7]",
+        "test_flash_backward.py::test_matches_autograd[True-8]",
+        "test_flash_backward.py::test_matches_autograd[True-16]",
+        "test_flash_backward.py::test_the_answer_does_not_depend_on_the_block_size[True]",
+        "test_flash_backward.py::test_causal_is_off_unless_it_is_asked_for",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[True-1]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[True-2]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[True-3]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[True-6]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds0]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds1]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds2]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds3]",
+        "test_flash_backward.py::test_the_block_contributions_add_up_to_the_whole_query_gradient",
+        "test_flash_backward.py::test_a_key_block_a_query_may_not_read_contributes_nothing_to_it",
+        "test_flash_backward.py::test_the_key_offset_is_what_places_the_block_in_the_sequence",
+        "test_flash_backward.py::test_fewer_queries_than_keys_puts_the_queries_at_the_end",
+        "test_flash_backward.py::test_a_short_query_window_over_a_long_history[True]",
+        "test_flash_backward.py::test_a_single_key_and_a_single_query",
+        "test_flash_backward.py::test_batch_entries_do_not_mix",
+        "test_flash_backward.py::test_the_inputs_are_left_alone"
+      ],
+      "detail": ""
+    },
+    {
+      "slug": "fused_rmsnorm_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "needs_accelerator",
+      "duration_s": 0.0,
+      "counts": {},
+      "failed_tests": [],
+      "detail": "no cuda device on this machine"
+    },
+    {
+      "slug": "metal_cross_entropy_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "mps_stalled",
+      "duration_s": 14.64,
+      "counts": {},
+      "failed_tests": [],
+      "detail": "every one of 4 attempts landed in a stalled MPS process; nothing judged the solution"
+    },
+    {
+      "slug": "metal_softmax_backward_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "mps_stalled",
+      "duration_s": 15.14,
+      "counts": {},
+      "failed_tests": [],
+      "detail": "every one of 4 attempts landed in a stalled MPS process; nothing judged the solution"
+    }
+  ]
+}
