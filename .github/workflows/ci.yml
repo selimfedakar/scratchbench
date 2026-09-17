@@ -72,6 +72,15 @@ jobs:
       - name: The leaderboard's tables match the results behind them
         run: python tools/render_leaderboard.py --check
 
+      # And the same idea on the front page. The session 18 claims audit found
+      # eight stale numbers in `README.md`, every one of which had been correct
+      # when it was typed and went wrong when a task was added or a draw taken.
+      # The counts and the task table are now derived from `tasks/` — hidden
+      # test totals included, by collecting them rather than trusting a figure —
+      # so a count that drifts fails the build instead of greeting readers.
+      - name: The README's counts match the task directories
+        run: python tools/render_readme.py --check
+
 # There is no accelerated job here, and its absence is a decision rather than an
 # omission. Running the accelerated tier in CI means attaching a self-hosted
 # runner with an NVIDIA device to this repository, and this repository is
