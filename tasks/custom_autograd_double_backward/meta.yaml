@@ -13,6 +13,7 @@ time_limit_s: 180
 tier: laptop
 requires_gpu: false
 deps: [torch]
+hidden_tests: 116
 added: 2026-08-20
 # Written and verified on 2026-08-20: the reference passes 116 hidden tests, the
 # untouched starter fails all 116, and twelve mutants each came back with the
