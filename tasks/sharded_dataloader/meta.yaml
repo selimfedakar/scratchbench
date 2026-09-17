@@ -10,6 +10,7 @@ probes: >
 time_limit_s: 60
 requires_gpu: false
 deps: []
+hidden_tests: 53
 added: 2026-07-26
 # Moved out of v1 on 2026-08-13, on draws that were already published rather
 # than on new ones: the five-draw v1 sweeps of 2026-08-09 and the single sweep of
