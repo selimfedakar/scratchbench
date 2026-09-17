@@ -1,0 +1,175 @@
+{
+  "results_version": 3,
+  "harness_version": "0.1.0",
+  "model": "claude-haiku-4-5",
+  "run_at": "2026-09-17T02:43:52+00:00",
+  "task_set": "v2",
+  "headline_tier": "laptop",
+  "pass_rate": 0.0,
+  "measured": 3,
+  "not_measured": 1,
+  "pass_rate_by_category": {
+    "attention": 0.0
+  },
+  "pass_rate_by_tier": {
+    "accelerated": {
+      "pass_rate": 0.0,
+      "solved": 0,
+      "measured": 2,
+      "total": 3,
+      "no_accelerator": 1,
+      "no_evidence": 1,
+      "categories": {
+        "kernels": 0.0
+      }
+    },
+    "laptop": {
+      "pass_rate": 0.0,
+      "solved": 0,
+      "measured": 1,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "attention": 0.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-haiku-4-5-20260917T024038",
+    "index": 3,
+    "of": 10
+  },
+  "wall_clock_s": 76.75,
+  "usd_cost": 0.034121,
+  "tokens": {
+    "input": 4886,
+    "output": 5847,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.10.9",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "executable": "/Users/selimfedakar/anaconda3/bin/python"
+  },
+  "tasks": [
+    {
+      "slug": "flash_attention_backward",
+      "category": "attention",
+      "tier": "laptop",
+      "difficulty": 5,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 1.85,
+      "counts": {
+        "failed": 37,
+        "passed": 12
+      },
+      "failed_tests": [
+        "test_flash_backward.py::test_matches_autograd[False-1]",
+        "test_flash_backward.py::test_matches_autograd[False-2]",
+        "test_flash_backward.py::test_matches_autograd[False-3]",
+        "test_flash_backward.py::test_matches_autograd[False-4]",
+        "test_flash_backward.py::test_matches_autograd[False-5]",
+        "test_flash_backward.py::test_matches_autograd[False-7]",
+        "test_flash_backward.py::test_matches_autograd[False-8]",
+        "test_flash_backward.py::test_matches_autograd[False-16]",
+        "test_flash_backward.py::test_matches_autograd[True-1]",
+        "test_flash_backward.py::test_matches_autograd[True-2]",
+        "test_flash_backward.py::test_matches_autograd[True-3]",
+        "test_flash_backward.py::test_matches_autograd[True-4]",
+        "test_flash_backward.py::test_matches_autograd[True-5]",
+        "test_flash_backward.py::test_matches_autograd[True-7]",
+        "test_flash_backward.py::test_matches_autograd[True-8]",
+        "test_flash_backward.py::test_matches_autograd[True-16]",
+        "test_flash_backward.py::test_the_answer_does_not_depend_on_the_block_size[False]",
+        "test_flash_backward.py::test_the_answer_does_not_depend_on_the_block_size[True]",
+        "test_flash_backward.py::test_a_block_size_past_the_end_is_a_single_block",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[False-1]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[False-2]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[False-3]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[True-1]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[True-2]",
+        "test_flash_backward.py::test_identical_values_make_the_query_and_key_gradients_vanish[True-3]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[False-bounds0]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[False-bounds1]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[False-bounds2]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[False-bounds3]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds0]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds1]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds2]",
+        "test_flash_backward.py::test_one_block_carries_exactly_its_share_of_the_gradients[True-bounds3]",
+        "test_flash_backward.py::test_fewer_queries_than_keys_puts_the_queries_at_the_end",
+        "test_flash_backward.py::test_a_short_query_window_over_a_long_history[False]",
+        "test_flash_backward.py::test_a_short_query_window_over_a_long_history[True]",
+        "test_flash_backward.py::test_the_values_may_be_wider_or_narrower_than_the_keys"
+      ],
+      "detail": ""
+    },
+    {
+      "slug": "fused_rmsnorm_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "needs_accelerator",
+      "duration_s": 0.0,
+      "counts": {},
+      "failed_tests": [],
+      "detail": "no cuda device on this machine"
+    },
+    {
+      "slug": "metal_cross_entropy_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 7.16,
+      "counts": {
+        "failed": 17,
+        "passed": 51
+      },
+      "failed_tests": [
+        "test_cross_entropy_kernel.py::test_matches_a_float64_cpu_loss[33-5x33]",
+        "test_cross_entropy_kernel.py::test_matches_a_float64_cpu_loss[33-7x129]",
+        "test_cross_entropy_kernel.py::test_matches_a_float64_cpu_loss[33-2x1000]",
+        "test_cross_entropy_kernel.py::test_matches_a_float64_cpu_loss[96-4x8]",
+        "test_cross_entropy_kernel.py::test_matches_a_float64_cpu_loss[96-5x33]",
+        "test_cross_entropy_kernel.py::test_matches_a_float64_cpu_loss[96-7x129]",
+        "test_cross_entropy_kernel.py::test_matches_a_float64_cpu_loss[96-2x1000]",
+        "test_cross_entropy_kernel.py::test_a_group_size_that_is_not_a_power_of_two[33]",
+        "test_cross_entropy_kernel.py::test_a_group_size_that_is_not_a_power_of_two[96]",
+        "test_cross_entropy_kernel.py::test_a_group_size_that_is_not_a_power_of_two[129]",
+        "test_cross_entropy_kernel.py::test_a_group_size_that_is_not_a_power_of_two[1000]",
+        "test_cross_entropy_kernel.py::test_a_group_wider_than_one_simdgroup[33]",
+        "test_cross_entropy_kernel.py::test_a_group_wider_than_one_simdgroup[129]",
+        "test_cross_entropy_kernel.py::test_a_wide_row_of_large_logits[96]",
+        "test_cross_entropy_kernel.py::test_a_wide_row_of_large_logits[1000]",
+        "test_cross_entropy_kernel.py::test_a_target_the_row_is_certain_about_costs_nothing",
+        "test_cross_entropy_kernel.py::test_targets_at_both_ends_of_the_row[5]"
+      ],
+      "detail": ""
+    },
+    {
+      "slug": "metal_softmax_backward_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "solution_error",
+      "duration_s": 1.5,
+      "counts": {
+        "error": 81
+      },
+      "failed_tests": [],
+      "detail": "^"
+    }
+  ]
+}
