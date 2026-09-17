@@ -13,6 +13,7 @@ tier: accelerated
 requires_gpu: true
 accelerator: metal
 deps: [torch]
+hidden_tests: 68
 added: 2026-08-13
 # Written and verified on an M1 Pro on 2026-08-13: the reference passes 68
 # tests, the untouched starter fails all 68 with assertion errors, and every one
@@ -56,14 +57,26 @@ added: 2026-08-13
 frozen_set: v2
 calibration:
   - model: claude-opus-5
-    draws: 20
-    passed: 14
-    date: 2026-09-04
+    draws: 30
+    passed: 23
+    date: 2026-09-17
   - model: claude-sonnet-5
-    draws: 20
-    passed: 12
-    date: 2026-09-04
+    draws: 30
+    passed: 19
+    date: 2026-09-17
   - model: claude-haiku-4-5
-    draws: 19
+    draws: 29
+    passed: 4
+    date: 2026-09-17
+  - model: gpt-5.6-sol
+    draws: 10
+    passed: 7
+    date: 2026-09-17
+  - model: gpt-5.6-terra
+    draws: 10
+    passed: 9
+    date: 2026-09-17
+  - model: gpt-5.6-luna
+    draws: 7
     passed: 3
-    date: 2026-08-13
+    date: 2026-09-17
