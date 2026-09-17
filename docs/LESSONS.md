@@ -13,6 +13,143 @@ Newest first.
 
 ---
 
+## L48 — a bool with three answers, and a measurement that could not have settled it
+
+
+**What I expected.** The `v2` sweep's own draws to be either passes or failures,
+with the no-evidence statuses reserved for the things they are named after.
+
+**What happened.** `claude-haiku-4-5` produced two `collection_error` draws on
+`metal_softmax_backward_kernel` and one `timeout` on
+`metal_cross_entropy_kernel`. `collection_error` does not mean the model failed.
+It means **the task itself is broken** — the hidden tests do not collect against
+the untouched starter, so every number ever measured against that task is void.
+It prints as `BROKEN`. And `scratchbench validate` says both tasks are fine.
+
+**Where it comes from.** A graded run that produced no gradeable result asks one
+question to decide which side of the evidence line it falls on: does the
+baseline still collect? The answer is a bool:
+
+```python
+        return returncode == PYTEST_TESTS_FAILED and not parse_summary(output).get("error")
+```
+
+`run_pytest_until_healthy` returns `STALLED_EXIT` when every attempt landed in a
+stalled MPS process. `STALLED_EXIT` is not `PYTEST_TESTS_FAILED`, so a baseline
+that **never ran** returns exactly the same `False` as a baseline that ran and
+could not collect. The question has three answers and the return type has two,
+so the machine's state gets published as a verdict on the task.
+
+This is L42's own failure mode leaking through a seam L42 built. The guard
+exists so a stalled process is never recorded as a `timeout`; it does its job
+for the graded run and then the attribution path collapses its result into a
+different wrong label. Both are `NO_EVIDENCE`, so no rate moves — what moves is
+the meaning, and "this task is broken" is the one alarm here that must not cry
+wolf.
+
+**The part that is actually about me.** I had the mechanism within a minute and
+then tried to confirm it with the wrong measurement. I compared `duration_s` on
+the two `collection_error` draws against their neighbours, found them at 1.47s
+and 2.06s, and started writing that the durations were too fast for four stalled
+attempts. They say nothing at all: `duration_s` times the **graded** run, and
+the baseline run happens inside `starter_collects_cleanly`, downstream of it and
+unrecorded. I had produced a number, and its only real property was that it
+existed.
+
+L42 is *a control that has not been repeated is not a control*. This is one
+below that: **a measurement that could not have come out the other way is not a
+measurement.** Before believing a number, say out loud what value would have
+refuted the hypothesis. I could not have said it, because there wasn't one.
+
+**What changed.** `starter_collects_cleanly` returns `bool | None`, `None`
+meaning the baseline never ran and accused nobody, and `grade` maps that to
+`mps_stalled` instead of `collection_error`. Two tests hold both sides of the
+seam: a stalled baseline must not say the task is broken, and a genuinely
+uncollectable task still must.
+
+**What is still open, and it is open rather than resolved.** Whether those two
+published draws were stalls is **not established**. The fix is provable by
+construction; the diagnosis of the historical draws is not, and confirming it
+means re-running Metal work on a machine that had a sweep in flight. The draws
+stay exactly as they were recorded either way — relabelling evidence after
+seeing which way it went is L43, and it does not become acceptable because I
+would be relabelling it in the direction that flatters my own diagnosis.
+
+**What it cost.** Nothing published, because the sweep's rates exclude both
+statuses. It came within one paragraph of costing a written claim that a
+measurement supported, when it could not have.
+
+---
+
+## L47 — a test that reads the machine reports the machine, and CI told me so three times
+
+**What I expected.** The harness suite was green on this laptop at the end of
+every session, so the suite was passing. CI is a second machine running the same
+suite, which I thought of as redundancy rather than as a second measurement.
+
+**What happened.** CI had been **red on every push since 2026-09-08** — three
+consecutive pushes, both Python versions, always the same single test — and I
+opened three sessions on top of it without looking. Session 17's restart file
+even says "check whether CI is green, because a new CI step is being added this
+round". I wrote that sentence and did not run the command.
+
+The test is `test_every_attempt_stalling_is_reported_as_no_evidence`. It exists
+to guard the thing L42 is about: a stalled MPS process recorded as a `timeout`
+would be evidence and a failure, and therefore a published claim about a model
+that actually describes my laptop. It fakes a permanently stalling `run_pytest`
+and asserts the outcome is `mps_stalled`. On a GPU-less runner the assertion
+never got that far:
+
+```
+>       assert outcome.status == "mps_stalled"
+E       AssertionError: assert 'needs_accelerator' == 'mps_stalled'
+```
+
+`grade` checks the hardware **before** it reaches the mechanism:
+
+```python
+    if task.requires_gpu and task.accelerator not in available_accelerators():
+```
+
+The task is `metal_cross_entropy_kernel`, so on my Mac the gate opens and the
+test measures the guard; on Linux the gate closes and the test measures the
+gate. One assertion, two different meanings, decided by whoever ran it.
+
+**Why it survived.** Because it passed where I was looking. The suite is the
+thing I run to find out whether I have broken something, and it answered "no"
+every time — correctly, for this machine. The failure needed a machine unlike
+mine to appear, which is exactly the class of bug CI is for, and I was treating
+CI as a copy of my laptop instead of as the other half of the measurement. Note
+the symmetry with what this repository publishes: `needs_accelerator` exists
+precisely so that a missing GPU is never silently rounded into a result. The
+same confusion I built a status table to prevent in the product, I shipped in
+the test suite.
+
+**What changed.** The test now pins the hardware it needs instead of inheriting
+it, so the assertion means the same thing everywhere:
+
+```python
+    monkeypatch.setattr(sandbox, "available_accelerators", lambda: {"metal"})
+```
+
+That is legitimate rather than a test dodging its environment: `add_stall_guard`
+keys on `task.accelerator` and never on the host, so the mechanism under test is
+genuinely machine-independent and the fixture now says so. I then ran the whole
+suite against a plugin that forces `torch.cuda.is_available()` and
+`torch.backends.mps.is_available()` to `False`, which is the CI environment
+reproduced locally — **131 passed** — so the claim is that the suite is
+hardware-independent, measured rather than assumed.
+
+**What it cost.** Three sessions of a red badge on a public repository whose
+whole argument is that you should not have to trust its numbers, plus the
+particular embarrassment of the badge sitting in the README's first line. The
+rule I actually needed is one line: **a green suite on one machine is one
+draw.** The same sentence this repository publishes about models applies to its
+own tests, and the cheap defence is `gh run list --limit 3` at the start of a
+session rather than the end.
+
+---
+
 ## L46 — the second vendor did not add a column, it moved the goalposts
 
 **What I expected.** §3 was scoped as plumbing: write the OpenAI adapter, take a
