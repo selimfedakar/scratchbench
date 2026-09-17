@@ -11,5 +11,6 @@ probes: >
 time_limit_s: 120
 requires_gpu: false
 deps: [numpy]
+hidden_tests: 57
 added: 2026-07-27
 frozen_set: v1
