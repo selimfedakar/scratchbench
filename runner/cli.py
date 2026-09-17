@@ -95,6 +95,20 @@ def command_validate(args: argparse.Namespace) -> int:
         elif starter.status == "timeout":
             problems.append("starter timed out instead of failing")
 
+        # The declared hidden-test count, re-derived. This is the half that
+        # makes `hidden_tests` evidence rather than a second place for a number
+        # to drift: the reference run above already knows how many tests there
+        # are, so the claim in `meta.yaml` is checked against it here, on a
+        # machine that could actually run the task. A task that is UNCHECKED or
+        # SKIPPED never reaches this line, which is deliberate — an absent
+        # accelerator or an absent dependency proves nothing either way.
+        declared = task.hidden_tests
+        observed = reference.counts.get("passed", 0) if reference.passed else None
+        if observed is not None and observed != declared:
+            problems.append(
+                f"meta.yaml declares hidden_tests: {declared}, the suite has {observed}"
+            )
+
         if reference.status == "missing_deps":
             verdict = f"SKIPPED  {reference.detail}"
         elif problems:
