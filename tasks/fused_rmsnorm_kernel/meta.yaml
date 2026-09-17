@@ -11,6 +11,7 @@ tier: accelerated
 requires_gpu: true
 accelerator: cuda
 deps: [torch, triton]
+hidden_tests: 24
 added: 2026-07-28
 # In, as of 2026-08-02: the reference passes 24 tests on an RTX A4500, the
 # untouched starter fails all 24 with real test failures, and all six mutants
