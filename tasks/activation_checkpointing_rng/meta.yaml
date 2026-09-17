@@ -12,6 +12,7 @@ time_limit_s: 120
 tier: laptop
 requires_gpu: false
 deps: [torch]
+hidden_tests: 34
 added: 2026-08-09
 # Written after the first two were refused, and refused for the same reason:
 # the top two models tried cleared it, claude-opus-5 10/10 and claude-sonnet-5
