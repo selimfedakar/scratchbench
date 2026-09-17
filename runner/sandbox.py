@@ -289,8 +289,15 @@ def run_pytest_until_healthy(
     return returncode, output, total, attempts
 
 
-def starter_collects_cleanly(task: Task) -> bool:
+def starter_collects_cleanly(task: Task) -> bool | None:
     """Do the hidden tests still collect and fail properly against the starter?
+
+    Three answers, not two. `None` means the baseline itself never ran — every
+    attempt landed in a stalled MPS process — so it says nothing about the task
+    either way. Collapsing that into `False` published the machine's state as a
+    verdict on the task: status `collection_error`, printed label `BROKEN`,
+    which is the one alarm here that must not cry wolf, because it means every
+    number ever measured against the task is void (docs/LESSONS.md L42, L48).
 
     Run only when a graded solution produced a collection error, to answer the
     one question that decides which side of the evidence line that outcome
@@ -313,9 +320,11 @@ def starter_collects_cleanly(task: Task) -> bool:
         assemble(task, task.starter_dir, baseline)
         add_hidden_tests(task, baseline)
         guarded = add_stall_guard(task, baseline)
-        returncode, output, _, _ = run_pytest_until_healthy(
+        returncode, output, _, attempts = run_pytest_until_healthy(
             baseline, task.time_limit_s, guarded
         )
+        if guarded and returncode == STALLED_EXIT:
+            return None
         return returncode == PYTEST_TESTS_FAILED and not parse_summary(output).get("error")
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
@@ -417,7 +426,16 @@ def grade(task: Task, solve, keep_workdir: Path | None = None) -> Outcome:
             # Nothing was judged. Two very different reasons look identical in
             # pytest's exit code, and they belong on opposite sides of the
             # evidence line, so the solution is asked to import on its own.
-            if starter_collects_cleanly(task):
+            baseline = starter_collects_cleanly(task)
+            if baseline is None:
+                # The baseline never ran, so it accused nobody. Not the task,
+                # and not the solution either.
+                status = "mps_stalled"
+                detail = (
+                    "the solution produced no gradeable run, and every attempt to "
+                    "check the baseline landed in a stalled MPS process"
+                )
+            elif baseline:
                 status = "solution_error"
                 detail = first_error_line(output) or (
                     "the tests could not run against this solution, and they "
