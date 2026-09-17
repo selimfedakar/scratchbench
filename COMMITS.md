@@ -408,3 +408,90 @@ records, because every number in the records is produced by the code above them.
 The harness suite is **120 passed** after it, up from 110, and
 `tools/check_calibration.py` and `tools/check_cost.py` both still read all 251
 published files at the older schema.
+
+---
+
+## Session 18, first half — the red badge, the claims audit, and a count that is evidence
+
+Ran before the `v2` sweep's draws are in, so that CI validates the schema change
+on its own rather than inside a batch that also moves numbers.
+
+The session opened on `gh run list`, which is the command the session 17 restart
+file told me to run and I had not: **CI had been red on every push since
+2026-09-08**, three pushes, both Python versions, one test. The test asserted
+against the machine it ran on rather than the mechanism it was written to check,
+so it passed here and failed on every GPU-less runner. `docs/LESSONS.md` **L47**,
+and the fix is already pushed.
+
+What follows it is §6.3's claims audit and what the audit found underneath the
+eight wrong numbers: the README was holding derived values by hand while a tool
+existed to derive them. So the counts and the task table are now generated the
+way `leaderboard/README.md`'s tables already are, and CI fails the build when the
+page and the directories disagree.
+
+⚠ **`meta.yaml` gains a required key, `hidden_tests`.** The first version of the
+renderer counted the tests by collecting them, which worked here and crashed on
+CI: `fused_rmsnorm_kernel` imports triton, which has no macOS wheel and is not
+installed on a CPU-only runner. A count that can only be derived on some machines
+is the same defect as a test that only passes on some machines — L47 reproduced
+by the tool written to prevent its cousin. So the number is checked in as
+evidence and `scratchbench validate` re-derives it wherever the task can actually
+run, which is the rule the accelerated tier already follows.
+
+The order below is the usual one: the contract before the files that satisfy it,
+the tool before the page it renders, the gate after the page is correct, and the
+records last because every number in them is produced by the code above them.
+All seventeen `meta.yaml` files carry a count derived this session, totalling
+**805**, and `validate` reports `ok` on all fifteen tasks it could run here.
+
+⚠ **`runner/sandbox.py` changes too, and it is a separate finding.** The `v2`
+sweep produced two `collection_error` draws on a task `validate` says is intact.
+That status does not mean the model failed — it means the **task** is broken and
+every number measured against it is void, and it prints as `BROKEN`. The cause
+is a bool with three answers: `starter_collects_cleanly` returns `False` both
+when the baseline ran and could not collect, and when it never ran at all
+because every attempt stalled. So the machine's state was published as a verdict
+on the task. It now returns `bool | None` and `grade` maps `None` to
+`mps_stalled`. Both statuses are `NO_EVIDENCE`, so **no published rate moves**;
+what moves is the meaning. `docs/LESSONS.md` **L48**, which also records that my
+first attempt to confirm the diagnosis used a number that could not have refuted
+it.
+
+⛔ **The historical draws are not relabelled.** Whether those two were stalls is
+unestablished, and rewriting recorded evidence to match a diagnosis is L43 —
+which does not become acceptable because the rewrite would flatter my own.
+
+---
+
+## Session 18, second half — the first v2 sweep, and the task it removed
+
+⛔ **Run the first-half script before this one.** These `meta.yaml` files are
+touched in both batches, and the `hidden_tests` schema has to land first.
+
+⛔ **The sixty draws are committed BEFORE any `meta.yaml`.** CI derives every
+calibration block from the draw files, so a block committed ahead of its evidence
+fails the build at that tip for a reason unrelated to the change.
+
+Six models, ten draws each, both vendors, `--set v2 --tier all` on the M1 Pro.
+**$8.4807** against §10.4's ~$30. The sweep was scheduled to produce a `v2` row
+and produced a decision instead.
+
+`flash_attention_backward` entered `v2` in August as the one laptop task
+separating two frontier Claude models. Sonnet's two losses did not repeat and two
+OpenAI models cleared it outright, so cumulatively the top two measured entries
+are both at the ceiling and `_check_admission` refuses it. It is `warmup` now, and
+**`v2` ships as three accelerated tasks with no laptop member at all** — stated on
+the page in those words rather than buried. `docs/ROADMAP.md` §11 carries the
+decision and the three alternatives it rejects; the one worth naming is that
+omitting the OpenAI models from the blocks would have kept the task by choosing
+which evidence counts after seeing which way it went (L21, L35, L43).
+
+⭐ The better half of the news is the accelerated tier: both Metal tasks now carry
+**six models at six distinct rates**, and every failing test instance clusters on
+threadgroup sizes 7, 33 and 96 — with `claude-sonnet-5` failing only there and
+never at 1, 32 or 1024. That is the hazard both tasks were written around, read
+out of the failure shapes rather than out of the author's description.
+
+⚠ `tools/render_leaderboard.py` also stops printing `0/0` for a task no draw ever
+graded. `fused_rmsnorm_kernel` wants CUDA and the sweep ran on a Mac, and `0/0`
+is arithmetically true while reading as "failed everything".
