@@ -12,6 +12,7 @@ time_limit_s: 180
 tier: laptop
 requires_gpu: false
 deps: [torch]
+hidden_tests: 57
 added: 2026-09-06
 # Laptop candidate 3, written against ROADMAP.md 9.3: both halves of the laptop
 # criterion rather than the first one only. Candidate 2,
