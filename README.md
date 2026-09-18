@@ -125,29 +125,41 @@ Every task in this repository has to clear a bar with two halves:
 
 Half of that pair is worthless. A suite that passes against a correct solution proves nothing if it also passes against an empty one, and an import error and a wrong answer score identically while meaning completely different things.
 
-```
-$ scratchbench validate --tier all
-task                          reference  untouched starter  time   verdict
-----------------------------  ---------  -----------------  -----  -----------------------------------------
-activation_checkpointing_rng  34 passed  34 failed          1.31s  ok
-attention_causal_mask         26 passed  26 failed          0.28s  ok
-bpe_merge_order               30 passed  30 failed          0.20s  ok
-flash_attention_backward      49 passed  49 failed          1.00s  ok
-fused_rmsnorm_kernel          -          -                  -      UNCHECKED  no cuda device on this machine
-grad_accumulation             27 passed  27 failed          1.61s  ok
-kv_cache_equivalence          21 passed  21 failed          0.30s  ok
-metal_cross_entropy_kernel    68 passed  68 failed          1.41s  ok
-online_softmax_attention      57 passed  57 failed          0.31s  ok
-quantization_error_bounds     65 passed  65 failed          0.29s  ok
-sharded_dataloader            53 passed  53 failed          0.22s  ok
-softmax_stability             29 passed  29 failed          0.26s  ok
-speculative_decoding_verify   24 passed  24 failed          4.72s  ok
+This is the default command, run on 2026-09-17 in a fresh clone of this
+repository on a machine with no GPU:
 
-12 task(s) validated: reference passes, starter fails cleanly.
-1 task(s) not checked here: fused_rmsnorm_kernel
+```
+$ scratchbench validate
+task                             reference   untouched starter  time   verdict
+-------------------------------  ----------  -----------------  -----  -------
+activation_checkpointing_rng     34 passed   34 failed          7.87s  ok
+attention_causal_mask            26 passed   26 failed          1.67s  ok
+bpe_merge_order                  30 passed   30 failed          0.15s  ok
+chunked_batchnorm_backward       44 passed   44 failed          1.03s  ok
+chunked_batchnorm_reduction      57 passed   57 failed          1.05s  ok
+custom_autograd_double_backward  116 passed  116 failed         1.39s  ok
+flash_attention_backward         49 passed   49 failed          1.16s  ok
+grad_accumulation                27 passed   27 failed          2.17s  ok
+kv_cache_equivalence             21 passed   21 failed          0.20s  ok
+online_softmax_attention         57 passed   57 failed          0.23s  ok
+quantization_error_bounds        65 passed   65 failed          0.24s  ok
+sharded_dataloader               53 passed   53 failed          0.32s  ok
+softmax_stability                29 passed   29 failed          0.22s  ok
+speculative_decoding_verify      24 passed   24 failed          4.11s  ok
+
+14 task(s) validated: reference passes, starter fails cleanly.
 ```
 
-That last line is the tier separation working rather than a gap: this machine has Metal and no CUDA, so the Triton task is `UNCHECKED` instead of counted.
+Fourteen, not seventeen, and that is the tier separation rather than a gap: the
+three accelerated tasks are not in the default scope at all. Ask for them with
+`--tier all` and a task whose hardware is missing reports itself instead of
+being counted:
+
+```
+fused_rmsnorm_kernel          -          -          -      UNCHECKED  no cuda device on this machine
+```
+
+Not a pass, not a failure, and not silently absent either.
 
 There is a third check that does not fit in a table, and it is the one that has found the most: **the reference gets mutated on purpose.** Passing tests prove the reference is right; only mutants prove the tests would catch anything else. Every wrong version a real implementation would plausibly produce — the off-by-one, the wrong axis, the missing rescale — gets written and run, and the suite has to catch each one.
 
@@ -338,7 +350,7 @@ The honest summary is that a score here is evidence about a model on a date, and
 - **One attempt per task.** A model that passes on the eleventh try is measuring the scaffolding, not the model. The number is written into every results file so nobody has to take it on trust. Repeated *independent* runs are a different thing from retries, and welcome.
 - **No sampling, thinking or effort knobs are set.** Every model is asked at its own defaults, deliberately: a score at one effort setting and a score at another are not comparable, and nothing in a results file would say so.
 - **No server-side fallbacks.** If the model that answers is not the model that was asked, the run raises rather than publishing one model's work under another's name.
-- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Forty-eight entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
+- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Forty-nine entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
 - **A correctness benchmark cannot see a slow kernel.** `metal_cross_entropy_kernel` grades the answer, and a kernel that ignores its threadgroup entirely — one lane, a serial loop over the row, no reduction — passes all sixty-eight tests. The only assertion that would catch it is a wall-clock one, and those are banned here in every tier because timing on unknown hardware is not reproducible. The degenerate kernel is checked in as a mutant with `SURVIVES` as its expected verdict, so the hole is a re-runnable fact rather than a footnote, and all ten Opus draws wrote a real threadgroup reduction anyway. `docs/LESSONS.md` L33.
 
 ## What this repository does not contain
