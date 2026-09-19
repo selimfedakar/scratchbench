@@ -13,6 +13,59 @@ Newest first.
 
 ---
 
+## L49 — the invariant was true, and it was a fact about one vendor
+
+**What I expected.** `test_nothing_published_was_billed_at_a_cache_rate` to keep
+passing. It asserts every published draw read zero cached tokens, and the reason
+was solid: each task is sent once, as its own prompt, so there is no prefix to
+reuse.
+
+**What happened.** CI went red on the `v2` sweep's own evidence:
+
+```
+>           assert tokens["cache_read"] == 0, path.name
+E           AssertionError: gpt-5.6-luna-20260917T042822+0000-draw2.json
+E           assert 3862 == 0
+```
+
+Anthropic caching is **opt-in** — it happens when a request sets
+`cache_control`, and this adapter never does. OpenAI caches long prompt prefixes
+**automatically**, with nothing to opt into and nothing in the request that asks
+for it. Nine of every ten OpenAI draws read about 90% of their prompt from a
+cache nobody requested. Every one of the 86 Claude draws still reads zero.
+
+**Why it survived.** Because it was *true*, provably, for two years of this
+repository's life, and it was checked rather than assumed — which is the good
+version of the habit. What I had not noticed is that the check's justification
+lived one layer below the check: not "we do not reuse prefixes" but "this
+vendor does not reuse prefixes unless asked". The sentence in the test even says
+"this adapter sends each task once", and that is still accurate. The adapter was
+never the thing deciding.
+
+**The consequence is on the page, not just in the suite.** The pricing itself
+was right — `price_from_counts` subtracts the cached count from the input count
+because the API reports it as a subset, and all 311 published costs re-derive.
+But the *published* OpenAI cost is a warm-cache price: 5.4% to 6.1% below what
+the same draws cost cold, because output dominates the bill. On a page whose
+argument is that you can re-run this and get the same numbers, a cost that is
+only reachable on your tenth attempt needs saying out loud, so the leaderboard
+now carries the cold-cache column beside it.
+
+**What changed.** The test split into the three invariants that are actually
+true: nobody is billed for a cache *write* (either vendor, different reasons), a
+cached read is always a *subset* of the input it came from — which is the
+assertion protecting the subtraction from silently under-billing every row if a
+vendor ever reported them alongside instead — and Anthropic draws specifically
+read zero, which is what makes two Claude rows comparable to each other.
+
+**What it cost.** One red CI run, and it was the sweep's own data that found it
+rather than a reader. The rule worth keeping: **an invariant that holds by
+construction is only as portable as the construction.** When a second
+implementation arrives, the tests that encode "this cannot happen" are the ones
+to re-read first, because they will keep passing right up until they are wrong.
+
+---
+
 ## L48 — a bool with three answers, and a measurement that could not have settled it
 
 
