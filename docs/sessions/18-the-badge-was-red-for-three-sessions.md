@@ -203,3 +203,56 @@ The ordering is the evidence. Haiku's two `collection_error` draws were taken at
 and the same situation now reports `mps_stalled`. No `collection_error` has
 appeared since. That is strong support for the L48 diagnosis and it is still not
 proof about those two specific draws, which stay exactly as they were recorded.
+
+## §6.1 — the clean-clone test, run for the first time
+
+Everything before today was verified in the working directory, with an editable
+install and a shell that already had the dependencies. A reader gets none of
+that. The transcript is `~/scratchbench-clean-clone-transcript.txt`; the
+summary is that **nothing needed a step the README does not mention**.
+
+```
+$ git clone https://github.com/selimfedakar/scratchbench && cd scratchbench
+$ python3 -m venv .venv && . .venv/bin/activate && pip install -e .
+$ which scratchbench
+.../scratchbench/.venv/bin/scratchbench
+
+$ scratchbench validate
+...
+14 task(s) validated: reference passes, starter fails cleanly.
+
+$ scratchbench run --model reference --tasks all
+laptop       100% (14/14)  ·  headline
+12.8s wall clock  ·  1 attempt(s) per task
+
+$ python tools/check_cost.py         → 311 file(s) checked
+$ python tools/check_calibration.py  → 44 entries from 311 draw(s)
+$ python tools/render_leaderboard.py --check → 6 regions match
+$ python tools/render_readme.py --check      → 2 regions match
+```
+
+Twelve point eight seconds for the whole laptop tier, from a clone, with no GPU.
+That is the claim the project is named after and it had never actually been
+tested from outside.
+
+**One README bug, and the audit had already flagged it without my fixing it.**
+The pasted `validate --tier all` transcript was from a thirteen-task repository.
+It is replaced with the fourteen-task default-scope run above — captured in the
+clean clone today rather than reconstructed — and the `UNCHECKED` line that
+makes the tier point is quoted separately instead of being implied by a table
+nobody re-ran.
+
+**What could not be captured, and why it is not in the README.** A real
+`validate --tier all` on this machine never finished. It was left running for
+nine minutes and killed: the two Metal tasks each stall, retry four times, and
+resolve to `BROKEN` — a verdict about the GPU's state after sixty draws, not
+about the tasks. Writing the transcript I *expected* would have been the easiest
+paragraph of the session and it would have been fiction, so the page carries the
+run that happened instead. The stall is L42 and it is the standing cost of
+developing this on an M1 Pro.
+
+⚠ This also means `python -m pytest` hangs on this machine after a sweep, because
+`test_validate_does_not_count_what_it_could_not_run` dispatches Metal. CI is
+unaffected — no MPS there, so those tasks are `UNCHECKED` — and the local
+equivalent is the forced no-GPU plugin, which runs the whole suite in 45 seconds:
+**143 passed**.
