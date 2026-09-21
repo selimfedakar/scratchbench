@@ -495,3 +495,32 @@ out of the failure shapes rather than out of the author's description.
 ⚠ `tools/render_leaderboard.py` also stops printing `0/0` for a task no draw ever
 graded. `fused_rmsnorm_kernel` wants CUDA and the sweep ran on a Mac, and `0/0`
 is arithmetically true while reading as "failed everything".
+
+---
+
+## Session 18, third half — the invariant that was a fact about one vendor
+
+CI went red on the sweep's own evidence.
+`test_nothing_published_was_billed_at_a_cache_rate` asserted every published
+draw read zero cached tokens, on the reasoning that each task is sent once as
+its own prompt so there is no prefix to reuse. That reasoning was correct and it
+was a fact about **Anthropic**, where caching is opt-in and this adapter never
+sets `cache_control`. OpenAI caches long prompt prefixes automatically, and nine
+of every ten OpenAI draws read about 90% of their prompt from a cache nobody
+requested. All 86 Claude draws still read zero.
+
+⚠ **The pricing was never wrong** — `price_from_counts` subtracts the cached
+count from the input count because the API reports it as a subset, and all 311
+published costs re-derive. What is wrong is publishing a warm-cache price on a
+page whose argument is that you can re-run this: the OpenAI rows are 5.4% to
+6.1% cheaper than the same draws cost cold. `leaderboard/README.md` now carries
+the cold-cache column beside them.
+
+The test splits into the three invariants that are actually true across both
+vendors: nobody is billed for a cache **write**; a cached read is always a
+**subset** of the input it came from, which is the assertion protecting the
+subtraction from silently under-billing every row; and **Anthropic** draws read
+zero, which is what makes two Claude rows comparable to each other.
+
+`docs/LESSONS.md` **L49**. The rule worth keeping: an invariant that holds by
+construction is only as portable as the construction.
