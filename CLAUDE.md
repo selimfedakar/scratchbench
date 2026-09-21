@@ -262,10 +262,29 @@ set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
   the GPU. It fails on this machine whenever a sweep is in flight or the GPU is
   left stalled; it is fine on CI, where the Metal tasks are `UNCHECKED`. Do not
   run the suite during a sweep.
-- ⏳ **Still open:** the rented CUDA box (`~/scratchbench-CUDA-KUTUSU-KOS.sh`) for
-  `fused_rmsnorm_kernel` at ten draws — now **one of `v2`'s three members**, so it
-  matters more than it did. And §6.1's clean-clone test, which has still never
-  been run and needs a push first (`~/scratchbench-clean-clone-test.sh`).
+- ⭐ **§6.1's clean-clone test ran for the first time and passed clean.** Clone,
+  venv, `pip install -e .`, CLI on PATH, `validate` **14 task(s) validated**,
+  `run --model reference --tasks all` **100% (14/14) in 12.8s**, and all four CI
+  checks reproduce from that clone. Nothing needed a step the README omits.
+  Transcript: `~/scratchbench-clean-clone-transcript.txt`.
+- ⛔ **A real `validate --tier all` could not be captured here and the README no
+  longer pretends otherwise.** Nine minutes, then killed: both Metal tasks stall,
+  retry four times and resolve to `BROKEN`, which is a verdict about the GPU
+  after sixty draws rather than about the tasks. The pasted transcript is now the
+  fourteen-task default-scope run actually observed in the clean clone.
+- 🔴 **L49: the cache invariant was a fact about one vendor.** A test asserted
+  every published draw read zero cached tokens — true, and true *because
+  Anthropic caching is opt-in*. OpenAI caches prefixes automatically, and nine of
+  ten OpenAI draws read ~90% of their prompt from a cache nobody requested.
+  Pricing was never wrong (cached tokens are a subset and are subtracted), but
+  the published OpenAI costs are **warm-cache prices, 5.4%–6.1% below cold**, and
+  the leaderboard now carries the cold column beside them.
+- ⏳ **Still open, and it is the only thing between here and Show HN:** the rented
+  CUDA box (`~/scratchbench-CUDA-KUTUSU-KOS.sh`) for `fused_rmsnorm_kernel` at ten
+  draws. It is **one of `v2`'s three members** and still sits at five draws per
+  model from August, with `claude-sonnet-5` never asked it at all. Either finish
+  it or say on the page that the CUDA member is at five draws — do not announce
+  without one of the two. Draft post: `~/scratchbench-SHOW-HN-TASLAK.md`.
 
 ## State as of 2026-09-08, session 17 (verify before trusting)
 
