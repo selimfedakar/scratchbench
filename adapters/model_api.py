@@ -77,10 +77,6 @@ INSTRUCTIONS = (
 )
 
 
-class ResponseError(RuntimeError):
-    """The response cannot be graded, and is not evidence about the model."""
-
-
 def build_prompt(task: Task, workdir: Path) -> str:
     """The user turn: the task's specification, then the files to fill in.
 
