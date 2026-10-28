@@ -6,7 +6,7 @@
 
 **Can the model actually implement it?**
 
-Machine learning machinery — attention masks, KV-caches, gradient accumulation, quantization, a fused Triton kernel, a Metal threadgroup reduction — written from a written specification and graded by hidden pytest suites. On the laptop you already own. Under five minutes a task. No GPU, no Kaggle account, no cloud bill.
+Machine learning machinery — attention masks, KV-caches, gradient accumulation, quantization, a fused Triton kernel, a Metal threadgroup reduction — written from a written specification and graded by hidden pytest suites. On the laptop you already own. Under five minutes a task. The CPU tier needs no GPU and no cloud bill; grading a real model is a paid API call, and three of the tasks want a GPU — both kept apart from the laptop rate rather than folded into it.
 
 ```
 $ scratchbench run --model claude-haiku-4-5 --tasks softmax_stability
@@ -32,7 +32,7 @@ I like MLE-bench. I like KernelBench. I could not run either of them.
 
 MLE-bench asks agents to place in Kaggle competitions: real datasets, real training runs, hours of compute per task. KernelBench wants an NVIDIA GPU. SWE-bench and the harnesses around it grade something else entirely — fixing issues in an existing repository, which is a different skill from building the thing in the first place.
 
-So there is a gap, and it is a specific one. Nobody is measuring whether a model can implement the *machinery* of machine learning — the causal mask, the KV-cache, the gradient accumulation, the quantization round-trip — correctly, from a specification, with nothing to copy from.
+So there is a gap, and it is a specific one. What I could not find is a benchmark for whether a model can implement the *machinery* of machine learning — the causal mask, the KV-cache, the gradient accumulation, the quantization round-trip — correctly, from a specification, on a laptop, with nothing to copy from. The benchmarks above and their neighbours measure things next to it — Kaggle placements, GPU kernels, issue fixing; this is the corner I wanted and did not have.
 
 And here is the part that makes closing it possible: **you do not need a training run to grade an implementation.** You need tests. A wrong attention mask fails a shape-and-values assertion in eleven milliseconds. The loss curve was never the referee.
 
@@ -47,7 +47,7 @@ That single constraint is the whole design:
 - **A full sweep costs tens of dollars, not thousands** — so it can be re-run the day a new model ships, not six months later.
 
 <!-- rendered: task-counts -->
-Seventeen tasks and 805 hidden tests. Fourteen of them run on any laptop and need nothing but Python; the other three need a GPU (CUDA and Metal), are reported beside the headline with the hardware each one wants, and are never folded into it.
+Seventeen tasks and 808 hidden tests. Fourteen of them run on any laptop and need nothing but Python; the other three need a GPU (CUDA and Metal), are reported beside the headline with the hardware each one wants, and are never folded into it.
 <!-- /rendered -->
 
 ## The first rows
@@ -61,14 +61,9 @@ Seventeen tasks and 805 hidden tests. Fourteen of them run on any laptop and nee
 
 Read that first row as a limit as much as a result: **the laptop tier has stopped measuring at the top.** The sampling is real and it shows up in the same files — the prompt is byte-identical each time so the input is fixed at 15858 tokens, while the output ranges over 16476 to 19070, a 16% spread in what the model actually wrote. Five materially different answers, one verdict every time. A ceiling hit once is a good day; a ceiling hit five times out of five is a ceiling.
 
-**The accelerated tier has not stopped measuring.** One Triton task, same model, same day:
+**The accelerated tier has not stopped measuring — but a fuller sweep moved which task does it.** The first CUDA rows were one Triton task at five draws, Opus 1/5 and Haiku 3/5, where the finding was never the rate but the shape underneath it: **Opus failed one test out of twenty-four, the same one every time; Haiku, when it failed, failed all twenty-four.** A working kernel with an edge missed and a kernel that does not run are the same word under binary scoring and completely different results. The edge is that Triton specializes an integer argument whose value is `1` into a compile-time constant, so `n_cols.to(tl.float32)` compiles at every row width except a single-column one — which `prompt.md` licenses explicitly.
 
-| Model | Pass rate | Draws | Solved | Cost per draw |
-|---|---:|---:|---:|---:|
-| `claude-opus-5` | **20%** | 5 | 1/5 | $0.049 to $0.061 |
-| `claude-haiku-4-5` | **60%** | 5 | 3/5 | $0.008 |
-
-That is not Haiku beating Opus — five draws of one task cannot tell 20% from 60%. It is what sits underneath: **Opus fails one test out of twenty-four, the same one every time; Haiku, when it fails, fails all twenty-four.** A working kernel with an edge missed and a kernel that does not run are the same word under binary scoring and completely different results. The edge is that Triton specializes an integer argument whose value is `1` into a compile-time constant, so `n_cols.to(tl.float32)` compiles at every row width except a single-column one — which `prompt.md` licenses explicitly.
+Finished at ten draws across both vendors on 2026-10-28, that task saturated at the top: Opus **5/10** (still only the single-column edge, five for five), Haiku **5/10**, and `claude-sonnet-5`, `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna` all **10/10**. Two entries at 100% is exactly what the admission rule refuses, so the CUDA task is `warmup` now and the accelerated tier's discrimination has moved to the two Metal tasks, where it is still sharp — `metal_cross_entropy_kernel` goes Opus 23/30, Sonnet 19/30, Haiku 4/29. [The next set has to earn its place](#the-next-set-has-to-earn-its-place) is the whole story, and it is flash-attention's ejection a second time.
 
 Every results file is checked in at [`leaderboard/`](leaderboard/) and every cost re-derives from the tokens beside it. The whole table cost $3.30. What all of it implies about the next task set is [`docs/V2_DESIGN.md`](docs/V2_DESIGN.md).
 
@@ -84,6 +79,13 @@ scratchbench run --model reference --tasks all # the control: known-correct solu
 scratchbench report                            # your results, next to everyone else's
 ```
 
+Run it from the clone. The tasks are the benchmark and they live in the
+repository, not in a published wheel — `pip install scratchbench` on its own
+would install the harness with nothing to grade, so there is no PyPI release and
+the editable install above is the supported path. Run from a checkout and the
+CLI finds the tasks beside it; run from an installed wheel and it says so rather
+than failing obscurely.
+
 To grade a real model, add the SDK and a key:
 
 ```bash
@@ -93,6 +95,10 @@ scratchbench run --model claude-opus-5 --tasks all
 ```
 
 Start with `--model reference`, though, and not out of politeness. A harness that has never been proven against a correct solution will happily report that a model failed when what actually failed was the harness — and a benchmark gets exactly one chance to publish a wrong number about somebody else's work.
+
+### Running generated code
+
+Grading a model runs code the model wrote. The harness strips credential-shaped environment variables from the grading process and only drops the hidden tests in after the solver has finished writing, so a solution cannot read a key or a test it should not — but that is the limit of it, and it is **not a security sandbox.** pytest runs the solution in the same interpreter as the tests, with this machine's filesystem and network. Generated code can read outside its working directory and reach the network, exactly as any Python you run can. Treat `scratchbench run --model <real model>` the way you would treat running any untrusted program: on a machine, or in a disposable container or VM, that you are willing to hand to it. The `reference` control run is your own code and carries none of this. A properly isolated grading path is on the roadmap and is not here yet.
 
 ## Three things this found that a pass rate would not have
 
@@ -161,7 +167,7 @@ fused_rmsnorm_kernel          -          -          -      UNCHECKED  no cuda de
 
 Not a pass, not a failure, and not silently absent either.
 
-There is a third check that does not fit in a table, and it is the one that has found the most: **the reference gets mutated on purpose.** Passing tests prove the reference is right; only mutants prove the tests would catch anything else. Every wrong version a real implementation would plausibly produce — the off-by-one, the wrong axis, the missing rescale — gets written and run, and the suite has to catch each one.
+There is a third check that does not fit in a table, and it is the one that has found the most: **the reference gets mutated on purpose.** Passing tests prove the reference satisfies the contract they cover; only mutants prove the tests would catch a wrong version of it at all. Every wrong version a real implementation would plausibly produce — the off-by-one, the wrong axis, the missing rescale — gets written and run, and the suite has to catch each one.
 
 That check has changed this repository three times, and [`docs/LESSONS.md`](docs/LESSONS.md) has all three. The shortest version of why it exists: `sharded_dataloader` passed fifty-one tests, and a wrong implementation that gave each rank a contiguous slab instead of every `world_size`-th sample passed all fifty-one of them too.
 
@@ -222,21 +228,29 @@ See [`TASK_FORMAT.md`](TASK_FORMAT.md) for the full contract, and [`CONTRIBUTING
 | `grad_accumulation` | v1 | training | 3 | 27 | not calibrated |
 | `kv_cache_equivalence` | v1 | attention | 3 | 21 | not calibrated |
 | `online_softmax_attention` | v1 | attention | 5 | 57 | not calibrated |
-| `fused_rmsnorm_kernel` ⚡ | v2 | kernels | 4 | 24 | `claude-opus-5` 1/5 · `claude-haiku-4-5` 3/5 |
 | `metal_cross_entropy_kernel` ⚡ | v2 | kernels | 4 | 68 | `claude-opus-5` 23/30 · `claude-sonnet-5` 19/30 · `claude-haiku-4-5` 4/29 · `gpt-5.6-sol` 7/10 · `gpt-5.6-terra` 9/10 · `gpt-5.6-luna` 3/7 |
 | `metal_softmax_backward_kernel` ⚡ | v2 | kernels | 4 | 81 | `claude-opus-5` 16/20 · `claude-sonnet-5` 12/20 · `claude-haiku-4-5` 2/18 · `gpt-5.6-sol` 7/10 · `gpt-5.6-terra` 9/10 · `gpt-5.6-luna` 4/7 |
 | `attention_causal_mask` | warmup | attention | 2 | 26 | `claude-opus-5` 6/6 · `claude-sonnet-5` 5/5 · `claude-haiku-4-5` 4/6 |
 | `activation_checkpointing_rng` | warmup | training | 4 | 34 | `claude-opus-5` 10/10 · `claude-sonnet-5` 10/10 · `claude-haiku-4-5` 1/10 |
-| `chunked_batchnorm_backward` | warmup | training | 4 | 44 | `claude-opus-5` 10/10 · `claude-sonnet-5` 10/10 · `claude-haiku-4-5` 2/10 |
+| `chunked_batchnorm_backward` | warmup | training | 4 | 45 | `claude-opus-5` 10/10 · `claude-sonnet-5` 10/10 · `claude-haiku-4-5` 0/10 |
 | `custom_autograd_double_backward` | warmup | training | 4 | 116 | `claude-opus-5` 10/10 · `claude-sonnet-5` 10/10 · `claude-haiku-4-5` 0/10 |
+| `fused_rmsnorm_kernel` ⚡ | warmup | kernels | 4 | 24 | `claude-opus-5` 6/15 · `claude-sonnet-5` 10/10 · `claude-haiku-4-5` 8/15 · `gpt-5.6-sol` 10/10 · `gpt-5.6-terra` 10/10 · `gpt-5.6-luna` 10/10 |
 | `quantization_error_bounds` | warmup | numerics | 4 | 65 | `claude-opus-5` 6/6 · `claude-sonnet-5` 5/5 · `claude-haiku-4-5` 6/6 |
 | `sharded_dataloader` | warmup | data | 4 | 53 | `claude-opus-5` 6/6 · `claude-sonnet-5` 5/5 · `claude-haiku-4-5` 6/6 |
 | `speculative_decoding_verify` | warmup | attention | 4 | 24 | `claude-opus-5` 15/15 · `claude-sonnet-5` 10/10 · `claude-haiku-4-5` 10/20 |
-| `chunked_batchnorm_reduction` | warmup | training | 5 | 57 | `claude-opus-5` 9/10 · `claude-sonnet-5` 10/10 · `claude-haiku-4-5` 0/10 |
+| `chunked_batchnorm_reduction` | warmup | training | 5 | 59 | `claude-opus-5` 8/10 · `claude-sonnet-5` 9/10 · `claude-haiku-4-5` 0/10 |
 | `flash_attention_backward` | warmup | attention | 5 | 49 | `claude-opus-5` 25/25 · `claude-sonnet-5` 18/20 · `claude-haiku-4-5` 5/29 · `gpt-5.6-sol` 10/10 · `gpt-5.6-terra` 10/10 · `gpt-5.6-luna` 9/10 |
 <!-- /rendered -->
 
-**`v1` is five laptop tasks and it was eight, plus the CUDA kernel, when the rows above were measured.** `attention_causal_mask`, `sharded_dataloader` and `quantization_error_bounds` moved to `warmup` on 2026-08-13, on the draws already published rather than on new ones: three models, six draws each for two of them, and only Haiku ever failed one. A task that everything solves is not wrong, it has stopped measuring, and the rule that says so is below. `fused_rmsnorm_kernel` moved the other way on 2026-08-17, out of `v1` and into `v2`, on its own published draws: Opus solves 1 of 5, which is the lowest frontier rate in the repository.
+![Pass rate by model for every calibrated task](docs/pass-rates.svg)
+
+*One bar per model per task, re-derived from the checked-in draws by
+`tools/render_chart.py` and CI-gated like every other number here. A row of full
+bars is a task that has stopped measuring; a row that spreads is one that still
+separates the field. The two Metal tasks and the ejected CUDA task are where the
+spread lives.*
+
+**`v1` is five laptop tasks and it was eight, plus the CUDA kernel, when the rows above were measured.** `attention_causal_mask`, `sharded_dataloader` and `quantization_error_bounds` moved to `warmup` on 2026-08-13, on the draws already published rather than on new ones: three models, six draws each for two of them, and only Haiku ever failed one. A task that everything solves is not wrong, it has stopped measuring, and the rule that says so is below. `fused_rmsnorm_kernel` moved the other way on 2026-08-17, out of `v1` and into `v2` on Opus 1/5 — and then back to `warmup` on 2026-10-28 when its ten-draw sweep across both vendors put two models at the ceiling, the same rule removing it that admitted it. The round trip is below.
 
 ⚡ = `accelerated` tier: needs a GPU — CUDA for the Triton task, Metal for the other, which is to say any Apple silicon Mac. Reported beside the laptop rate and **never folded into it**. On a machine without the hardware it comes back `needs_accelerator` — not a pass, not a failure, an absence of evidence, and it stays out of every percentage rather than being rounded down to zero.
 
@@ -270,9 +284,11 @@ All three were refused. Two of them deserved it: Opus and Sonnet both sweep them
 
 **And on 2026-09-17 the same rule took it back out, which is the most useful thing that has happened to this repository.** Ten fresh draws per model, plus a second vendor for the first time: Opus went 10 of 10, Sonnet went **10 of 10**, and `gpt-5.6-sol` went 10 of 10. Sonnet's two losses were the only thing holding the task in a numbered set, and they did not repeat. Cumulatively that is Opus 25/25, Sonnet 18/20, `gpt-5.6-sol` 10/10 — two entries at the ceiling, so `_check_admission` refuses it and it is `warmup` now.
 
-The consequence is stated plainly because burying it would be worse: **`v2` therefore has no laptop task at all.** It ships as three accelerated members and its laptop line reads *no members*, not *100%*. The alternative was to leave the second vendor out of the calibration blocks, which would have kept the task in the set and would have meant choosing which evidence counts after seeing which way it went — the exact move L21, L35 and L43 are each about. The laptop tier is saturated at the top for two labs' frontier models, and that is a measurement rather than a mood. `docs/ROADMAP.md` §11.
+The consequence is stated plainly because burying it would be worse: **`v2` therefore has no laptop task at all.** Its laptop line reads *no members*, not *100%*. The alternative was to leave the second vendor out of the calibration blocks, which would have kept the task in the set and would have meant choosing which evidence counts after seeing which way it went — the exact move L21, L35 and L43 are each about. The laptop tier is saturated at the top for two labs' frontier models, and that is a measurement rather than a mood. `docs/ROADMAP.md` §11.
 
-Every draw behind those numbers is checked in under [`calibration/`](calibration/) and [`leaderboard/`](leaderboard/), and `tools/check_calibration.py` re-derives all thirty-five entries from the 251 files on every push. A figure that decides whether a task is allowed into a frozen set is not allowed to be the one figure nobody can reproduce.
+**And on 2026-10-28 the same rule did the same thing to the CUDA task, so `v2` is two Metal tasks now.** `fused_rmsnorm_kernel` was finished at ten draws per model across both vendors on a rented RTX 4090 — the last measurement standing between the set and a launch. It came back Opus **5/10** (all five losses the single-column edge, the August signature holding) and Haiku 5/10, but `claude-sonnet-5` **10/10** and all three OpenAI models **10/10**. The top two measured rates are both 100%, so `_check_admission` refuses it exactly as it refused flash-attention, and `v2` loses its CUDA member too. What is left under the headline is two Metal tasks — no laptop member, no CUDA member — and the honest reading is that this set's discrimination is Apple-silicon-only until a harder task is written. `docs/LESSONS.md` L55. The uncomfortable half is L46 wearing a new hat: `gpt-5.6-luna`, the cheapest model asked, going 10/10 is half the reason the top two saturate, and a task Opus still fails half the time is called `warmup` because of it.
+
+Every draw behind those numbers is checked in under [`calibration/`](calibration/) and [`leaderboard/`](leaderboard/), and `tools/check_calibration.py` re-derives all forty-eight entries from the 362 files on every push. A figure that decides whether a task is allowed into a frozen set is not allowed to be the one figure nobody can reproduce.
 
 **One of those figures was re-drawn on 2026-09-04, and why is worth a paragraph.** This repository is developed on an M1 Pro where every other process that touches `torch.mps` turns out to be blocked for the whole of its life — no custom shader and no failing test required, and nobody knew until it was measured. Under that fault a graded run could be killed at its time limit and recorded `timeout`: evidence, and a failure, when in fact nothing about the model had been measured. Exactly one draw in the published `metal_cross_entropy_kernel` evidence is such a `timeout`. It is still counted as a failure, because dropping a draw after seeing which way it went is how a benchmark starts choosing its own evidence, and because that direction can only understate a model rather than flatter one. Thirty fresh draws were taken with `runner/mps_stall.py` guarding every graded process — sixty gradings, no `timeout`, no `mps_stalled` — and the two Metal tasks now carry twenty and ten draws per model respectively. `docs/LESSONS.md` L42 and L43 are the account.
 
@@ -338,19 +354,19 @@ Here "hidden" means hidden from the model at solve time, not secret. The prompts
 
 So, the policy, in two parts and no more than the project actually does:
 
-1. **Every row is dated and every set is frozen.** A result records the task-set version and the date it was run, and `v1` stays published after it stops meaning anything, as a historical record rather than a current claim. You get to watch the drift, which is more useful than a benchmark that quietly stops measuring and says nothing about it. This is in force now.
+1. **Every row is dated, and every published set's membership is frozen.** A result records the task-set version and the date it was run, and which tasks a set contained when it was measured is pinned in [`leaderboard/SET_MANIFESTS.yaml`](leaderboard/SET_MANIFESTS.yaml): `v1` names the eight laptop tasks it was measured over, forever, even after three of them move to `warmup`. A task's `frozen_set` label is mutable — it is where a task sits *now* — and set membership is not; the two were one field until they drifted apart, and a test re-derives the manifest from the published files so they cannot drift again unseen. You get to watch the evaluation drift without the historical rows moving under you. This is in force now.
 2. **A small private holdout is intended, and does not exist yet.** The plan is a handful of tasks calibrated exactly like the public ones and never published, used only to check whether a public score has drifted away from a private one. It is scheduled after `v2`'s first full sweep is out. Until those tasks exist this paragraph is a statement of intent and nothing else — **claiming a holdout that does not exist would be worse than having none**, because it would offer exactly the reassurance the reader cannot check.
 
 The honest summary is that a score here is evidence about a model on a date, and the further you get from that date the more it is a claim about the training data instead. [`docs/LESSONS.md`](docs/LESSONS.md) L30 is the entry where that stopped being theoretical.
 
 ## Honesty about everything else
 
-- **Every row is one draw, not a converged number.** The same model on the same task passed one run and failed the next, four hours apart, same prompt, same settings. The harness is pinned to be deterministic; the model is sampled, and none of the pinning reaches it. Two models one task apart are not distinguishable, and this repository will not pretend otherwise until there are repeated runs. `--repeat N` runs N independent sweeps and `report --variance` prints how many of them each task passed; the two rows above predate it and have no error bar.
+- **Every generation is one independent attempt, not a converged number.** A leaderboard row is the summary of however many draws it says it is, and a single draw is a sample: the same model on the same task passed one run and failed the next, four hours apart, same prompt, same settings. The harness is pinned to be deterministic; the model is sampled, and none of the pinning reaches it. Two models one task apart are not distinguishable, and this repository will not pretend otherwise until there are repeated runs. `--repeat N` runs N independent sweeps and `report --variance` prints how many of them each task passed; the two rows above predate it and have no error bar.
 - **The headline rate is the laptop tier and nothing else.** Not an average over the tiers that happened to run: the accelerated tier is reported in full beside it, never inside it, and the results file names which tier the percentage came from.
 - **One attempt per task.** A model that passes on the eleventh try is measuring the scaffolding, not the model. The number is written into every results file so nobody has to take it on trust. Repeated *independent* runs are a different thing from retries, and welcome.
 - **No sampling, thinking or effort knobs are set.** Every model is asked at its own defaults, deliberately: a score at one effort setting and a score at another are not comparable, and nothing in a results file would say so.
 - **No server-side fallbacks.** If the model that answers is not the model that was asked, the run raises rather than publishing one model's work under another's name.
-- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Forty-nine entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
+- **[`docs/LESSONS.md`](docs/LESSONS.md) is the other half of this repository.** Fifty-six entries, first person, newest first: what I expected, what happened, and what it cost. Including the ones where a wrong number nearly shipped and something mechanical caught it. A benchmark that is wrong looks exactly like a benchmark that is right, which is why the mistakes are documented rather than quietly fixed.
 - **A correctness benchmark cannot see a slow kernel.** `metal_cross_entropy_kernel` grades the answer, and a kernel that ignores its threadgroup entirely — one lane, a serial loop over the row, no reduction — passes all sixty-eight tests. The only assertion that would catch it is a wall-clock one, and those are banned here in every tier because timing on unknown hardware is not reproducible. The degenerate kernel is checked in as a mutant with `SURVIVES` as its expected verdict, so the hole is a re-runnable fact rather than a footnote, and all ten Opus draws wrote a real threadgroup reduction anyway. `docs/LESSONS.md` L33.
 
 ## What this repository does not contain
