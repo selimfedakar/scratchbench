@@ -1,0 +1,88 @@
+{
+  "results_version": 4,
+  "harness_version": "0.1.0",
+  "model": "claude-haiku-4-5",
+  "run_at": "2026-10-28T14:58:21+00:00",
+  "task_set": "v2",
+  "headline_tier": "laptop",
+  "pass_rate": null,
+  "measured": 1,
+  "not_measured": 0,
+  "pass_rate_by_category": {},
+  "pass_rate_by_tier": {
+    "accelerated": {
+      "pass_rate": 0.0,
+      "solved": 0,
+      "measured": 1,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "kernels": 0.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-haiku-4-5-20261028T145710",
+    "index": 4,
+    "of": 10
+  },
+  "wall_clock_s": 16.58,
+  "usd_cost": 0.008498,
+  "tokens": {
+    "input": 1333,
+    "output": 1433,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+    "executable": "/usr/local/bin/python",
+    "commit": null,
+    "dirty": null
+  },
+  "tasks": [
+    {
+      "slug": "fused_rmsnorm_kernel",
+      "category": "kernels",
+      "tier": "accelerated",
+      "difficulty": 4,
+      "task_version": 1,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 4.07,
+      "counts": {
+        "failed": 23,
+        "passed": 1
+      },
+      "failed_tests": [
+        "test_rmsnorm_kernel.py::test_one_block_covers_the_whole_row",
+        "test_rmsnorm_kernel.py::test_a_row_shorter_than_the_block_is_masked",
+        "test_rmsnorm_kernel.py::test_a_row_longer_than_the_block_takes_several_passes",
+        "test_rmsnorm_kernel.py::test_a_long_row_that_divides_evenly_into_blocks",
+        "test_rmsnorm_kernel.py::test_a_single_column",
+        "test_rmsnorm_kernel.py::test_float16_input_gives_float16_output",
+        "test_rmsnorm_kernel.py::test_float16_values_whose_squares_are_past_the_float16_ceiling",
+        "test_rmsnorm_kernel.py::test_a_float16_row_long_enough_to_take_sixteen_blocks",
+        "test_rmsnorm_kernel.py::test_rows_of_the_input_may_be_strided",
+        "test_rmsnorm_kernel.py::test_the_output_row_stride_is_respected",
+        "test_rmsnorm_kernel.py::test_each_column_is_scaled_by_its_own_weight",
+        "test_rmsnorm_kernel.py::test_rows_are_normalised_independently",
+        "test_rmsnorm_kernel.py::test_shuffling_the_rows_shuffles_the_answers",
+        "test_rmsnorm_kernel.py::test_epsilon_is_added_to_the_mean_square",
+        "test_rmsnorm_kernel.py::test_an_all_zero_row_is_finite",
+        "test_rmsnorm_kernel.py::test_the_kernel_does_not_touch_its_inputs",
+        "test_rmsnorm_kernel.py::test_the_same_input_gives_the_same_bits_twice",
+        "test_rmsnorm_kernel.py::test_the_wrapper_normalises",
+        "test_rmsnorm_kernel.py::test_the_wrapper_handles_a_row_length_that_is_not_a_power_of_two",
+        "test_rmsnorm_kernel.py::test_the_wrapper_returns_a_new_contiguous_tensor_on_the_same_device",
+        "test_rmsnorm_kernel.py::test_the_wrapper_accepts_a_strided_view",
+        "test_rmsnorm_kernel.py::test_the_wrapper_leaves_its_arguments_alone",
+        "test_rmsnorm_kernel.py::test_the_wrapper_defaults_epsilon"
+      ],
+      "detail": ""
+    }
+  ]
+}
