@@ -1106,3 +1106,98 @@ the time limit, and Sonnet's non-power-of-two fold.
 **Done when.** `flash_attention_backward` is `warmup`, every calibration block
 re-derives including both vendors, and the leaderboard carries a `v2` section
 whose laptop line says "no members" rather than "100%".
+
+---
+
+## 12. The 2026-10-16 review: what it closed and what it left
+
+An outside technical review (`scratchbench-review-2026-10-16/`, kept out of the
+repository) found eight numbered findings. Sessions 19 through 23 closed the ones
+that touch what a results file may claim; this section is the ledger of what
+remains, so none of it is quietly skipped.
+
+**Closed.** F01 (a no-test run recorded as passed), F03 (`validate` counting a
+task it could not run), F06 (a solution's 125 read as a stall) — session 19,
+L50. F04/F05 (the two batchnorm contracts tested only on benign inputs) — session
+20, L51, both tasks now version 2. F02 (the run environment is not a security
+sandbox) — session 21, L52: credentials stripped from the graded child and the
+trust boundary stated plainly, with real isolation still owed. F07's reproduced
+half (draws across a version bump folded into one error bar) and §5.1 (set
+membership drifting under a frozen name) — session 22, L53: grouping keyed on
+`(slug, task_version)`, the commit recorded in every run, and
+`leaderboard/SET_MANIFESTS.yaml` freezing membership.
+
+**Still open, in priority order.**
+
+- **F07, the rest of a run's identity.** Resolved model snapshot behind the
+  alias (the adapter verifies it; it is not yet written to the payload), hashes
+  of prompt/tests/solution, a dependency lock id, and a stored solution artifact
+  that could be *replayed* rather than only inspected with `--keep`. Grouping and
+  `check_calibration` should key on the same experiment identity once it exists;
+  today `check_calibration` is version-agnostic, which is correct only because
+  every published draw is version 1.
+- **The version-2 batchnorm re-sweep.** Both tasks carry version-1 calibration,
+  labelled as such. A clean re-sweep against the new tests is owed before either
+  block is presented as a version-2 measurement (it is not presented as one now).
+  Costs a laptop sweep, ~$2, and waits behind the CUDA box so both are one spend.
+- **The CUDA box.** `fused_rmsnorm_kernel` is one of `v2`'s three members and
+  still sits at five draws per model from August, with `claude-sonnet-5` never
+  asked it. Section 10.3 and `~/scratchbench-CUDA-KUTUSU-KOS.sh` are the job:
+  rent a single-GPU box, run ten draws across both vendors, bring the tarball
+  back, terminate the box. This is the last measurement between here and launch.
+- **Full isolation for F02.** A disposable container or VM grading path, so a
+  real model's generated code is not run with the host's filesystem and network.
+  Documented honestly in the meantime; not a launch blocker if the trust note
+  stands.
+- **§5.2/§6 editorial polish.** The correctness half is done (session 23). What
+  remains is trimming the ~6,000-word front page and adding the full
+  scope-comparison section — presentation, not accuracy.
+
+**Resolved by the review follow-up:** §5.2 and §6's claim list and F08 — session
+23. The leaderboard no longer folds tiers, the front-page claims say what is
+true, and the clone-only policy is stated in the README and the CLI.
+
+**Done when.** The open items above are either implemented or carry a dated entry
+here, and the launch exit criteria in section 8 hold. The grader, the contracts,
+the trust boundary, and experiment identity — the four that gate a defensible
+launch — are closed; what is left is one measurement (the CUDA box), one re-sweep
+that rides with it, and editorial polish.
+
+## 13. The CUDA box and the batchnorm re-sweep, run 2026-10-28
+
+The last measurement between here and launch, and the re-sweep that rode with
+it, are done — on one rented RTX 4090, the work parallelised twelve ways because
+it is API-bound (the GPU idled at ~7%; the wait is the model, not the kernel).
+170 draws, $4.44 of API spend. What it settled:
+
+- **`fused_rmsnorm_kernel` is `warmup`, not a `v2` member.** Finished at ten
+  draws per model across both vendors: Opus 5/10 (all five the single-column
+  edge, August's signature), Haiku 5/10, and Sonnet, `gpt-5.6-sol`,
+  `gpt-5.6-terra`, `gpt-5.6-luna` all 10/10. Two entries at 100% → `_check_admission`
+  refuses it. **`v2` loses its CUDA member and is two Metal tasks now** — no
+  laptop, no CUDA. This is flash-attention's ejection a second time; `docs/LESSONS.md`
+  L55. The calibration block is cumulative over August's five draws and October's
+  ten, which is sound because a Triton kernel's correctness is not a property of
+  the card that graded it.
+
+- **The version-2 batchnorm re-sweep is done; both stay `warmup`.**
+  `chunked_batchnorm_backward` Opus 10/10, Sonnet 10/10, Haiku 0/10 (down from
+  2/10 — the new `no_grad` test took the two survivors), refused by the rule.
+  `chunked_batchnorm_reduction` Opus 8/10, Sonnet 9/10, Haiku 0/10 — the rule
+  would now *admit* it, but it stays `warmup` by judgement because every frontier
+  loss fails `chunk_sizes0` too, the single-chunk split where the named mistake
+  is correct by construction, so the admission-clearing draws never touched the
+  mechanism. `docs/LESSONS.md` L56, and §9.4 holds. The v1 draws are gone from
+  `calibration/`; the blocks are version-2 measurements now, and L51 is closed.
+
+- **Credit ran out mid-sweep, and the machinery reported it.** Anthropic's
+  balance emptied partway through, so sixteen batchnorm draws came back
+  `adapter_error` — measured nothing, counted in neither numerator nor
+  denominator (the same rule as always). Topped up, the five short cells were
+  re-run to a clean ten graded draws each. Same shape as the 2026-08-09 and
+  2026-09-06 billing cut-offs: the hole is reported, never averaged over.
+
+**What is left for launch** is now editorial and the Show HN post (§7): the
+remaining debt in §12 (experiment identity, full F02 isolation, front-page
+trim) is not a blocker. The CUDA box line in §12 and the re-sweep line are both
+closed by this section.
