@@ -1,0 +1,119 @@
+{
+  "results_version": 4,
+  "harness_version": "0.1.0",
+  "model": "claude-haiku-4-5",
+  "run_at": "2026-10-28T15:19:12+00:00",
+  "task_set": "warmup",
+  "headline_tier": "laptop",
+  "pass_rate": 0.0,
+  "measured": 1,
+  "not_measured": 0,
+  "pass_rate_by_category": {
+    "training": 0.0
+  },
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": 0.0,
+      "solved": 0,
+      "measured": 1,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "training": 0.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-haiku-4-5-20261028T151445",
+    "index": 9,
+    "of": 10
+  },
+  "wall_clock_s": 20.09,
+  "usd_cost": 0.010499,
+  "tokens": {
+    "input": 1844,
+    "output": 1731,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+    "executable": "/usr/local/bin/python",
+    "commit": null,
+    "dirty": null
+  },
+  "tasks": [
+    {
+      "slug": "chunked_batchnorm_reduction",
+      "category": "training",
+      "tier": "laptop",
+      "difficulty": 5,
+      "task_version": 2,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 2.98,
+      "counts": {
+        "failed": 52,
+        "passed": 7
+      },
+      "failed_tests": [
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes0]",
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes1]",
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes2]",
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes3]",
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes4]",
+        "test_batchnorm_reduction.py::test_matches_autograd[chunk_sizes5]",
+        "test_batchnorm_reduction.py::test_the_two_walks_produce_what_the_driver_produces[chunk_sizes0]",
+        "test_batchnorm_reduction.py::test_the_two_walks_produce_what_the_driver_produces[chunk_sizes1]",
+        "test_batchnorm_reduction.py::test_the_two_walks_produce_what_the_driver_produces[chunk_sizes2]",
+        "test_batchnorm_reduction.py::test_the_two_walks_produce_what_the_driver_produces[chunk_sizes3]",
+        "test_batchnorm_reduction.py::test_the_two_walks_produce_what_the_driver_produces[chunk_sizes4]",
+        "test_batchnorm_reduction.py::test_the_two_walks_produce_what_the_driver_produces[chunk_sizes5]",
+        "test_batchnorm_reduction.py::test_the_epsilon_sits_under_the_square_root_with_the_variance[1e-08]",
+        "test_batchnorm_reduction.py::test_the_epsilon_sits_under_the_square_root_with_the_variance[1e-05]",
+        "test_batchnorm_reduction.py::test_the_epsilon_sits_under_the_square_root_with_the_variance[0.01]",
+        "test_batchnorm_reduction.py::test_the_epsilon_sits_under_the_square_root_with_the_variance[0.5]",
+        "test_batchnorm_reduction.py::test_the_statistics_are_over_the_kept_positions_and_nothing_else[0.2]",
+        "test_batchnorm_reduction.py::test_the_statistics_are_over_the_kept_positions_and_nothing_else[0.5]",
+        "test_batchnorm_reduction.py::test_the_statistics_are_over_the_kept_positions_and_nothing_else[1.0]",
+        "test_batchnorm_reduction.py::test_the_answer_does_not_depend_on_how_the_batch_is_split[chunk_sizes0]",
+        "test_batchnorm_reduction.py::test_the_answer_does_not_depend_on_how_the_batch_is_split[chunk_sizes1]",
+        "test_batchnorm_reduction.py::test_the_answer_does_not_depend_on_how_the_batch_is_split[chunk_sizes2]",
+        "test_batchnorm_reduction.py::test_the_answer_does_not_depend_on_how_the_batch_is_split[chunk_sizes3]",
+        "test_batchnorm_reduction.py::test_the_answer_does_not_depend_on_how_the_batch_is_split[chunk_sizes4]",
+        "test_batchnorm_reduction.py::test_the_answer_does_not_depend_on_how_the_batch_is_split[chunk_sizes5]",
+        "test_batchnorm_reduction.py::test_one_chunk_of_one_row_at_a_time",
+        "test_batchnorm_reduction.py::test_an_upstream_gradient_that_is_constant_leaves_the_input_alone[chunk_sizes0]",
+        "test_batchnorm_reduction.py::test_an_upstream_gradient_that_is_constant_leaves_the_input_alone[chunk_sizes1]",
+        "test_batchnorm_reduction.py::test_an_upstream_gradient_that_is_constant_leaves_the_input_alone[chunk_sizes2]",
+        "test_batchnorm_reduction.py::test_a_scale_of_zero_leaves_the_input_alone[chunk_sizes0]",
+        "test_batchnorm_reduction.py::test_a_scale_of_zero_leaves_the_input_alone[chunk_sizes1]",
+        "test_batchnorm_reduction.py::test_one_chunk_carries_exactly_its_share_of_the_input_gradients[0]",
+        "test_batchnorm_reduction.py::test_one_chunk_carries_exactly_its_share_of_the_input_gradients[1]",
+        "test_batchnorm_reduction.py::test_one_chunk_carries_exactly_its_share_of_the_input_gradients[2]",
+        "test_batchnorm_reduction.py::test_a_lopsided_split_does_not_move_the_denominators",
+        "test_batchnorm_reduction.py::test_a_padded_position_takes_no_gradient",
+        "test_batchnorm_reduction.py::test_what_sits_at_a_padded_position_changes_nothing",
+        "test_batchnorm_reduction.py::test_the_upstream_gradient_at_a_padded_position_changes_nothing",
+        "test_batchnorm_reduction.py::test_a_row_that_is_entirely_padding",
+        "test_batchnorm_reduction.py::test_a_chunk_that_is_entirely_padding",
+        "test_batchnorm_reduction.py::test_one_kept_position_in_the_whole_batch",
+        "test_batchnorm_reduction.py::test_small_geometries[one_channel]",
+        "test_batchnorm_reduction.py::test_small_geometries[one_position]",
+        "test_batchnorm_reduction.py::test_small_geometries[square]",
+        "test_batchnorm_reduction.py::test_one_chunk_holding_one_row_of_one_position",
+        "test_batchnorm_reduction.py::test_a_long_batch_of_many_small_chunks",
+        "test_batchnorm_reduction.py::test_channels_do_not_mix",
+        "test_batchnorm_reduction.py::test_the_gradients_have_the_shapes_and_dtype_of_what_they_differentiate",
+        "test_batchnorm_reduction.py::test_the_gradients_carry_no_autograd_history",
+        "test_batchnorm_reduction.py::test_the_inputs_are_left_alone",
+        "test_batchnorm_reduction.py::test_the_no_grad_contract_holds_when_the_inputs_require_grad",
+        "test_batchnorm_reduction.py::test_a_variance_near_the_cancellation_floor_stays_finite"
+      ],
+      "detail": ""
+    }
+  ]
+}
