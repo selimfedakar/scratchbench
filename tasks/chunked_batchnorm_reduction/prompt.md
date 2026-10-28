@@ -82,6 +82,14 @@ depend on it.
   gradient of exactly zero rather than something that is not a number.
 - There is at least one chunk, every chunk has at least one row, and every
   dimension is at least one. Channels do not interact.
+- The inputs are of order one and `eps` is a normalization constant of the usual
+  size — think of the value a batch-norm layer ships with, not a number chosen
+  to probe the edge of `float64`. You may take `var + eps` to be comfortably
+  positive on that domain; you are not being asked to keep a variance that has
+  been driven below the resolution of the arithmetic from going negative with an
+  `eps` smaller still. The one reduction this interface allows cannot carry
+  centred moments, so a variance recovered from raw ones has a cancellation floor,
+  and defending that floor is out of scope by design rather than by omission.
 - The gradients are exact, not approximate: whatever this returns should agree
   with the analytic answer to the precision `float64` allows over quantities of
   order one, which is many digits rather than a few.
