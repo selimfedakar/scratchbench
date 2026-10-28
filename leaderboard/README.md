@@ -34,6 +34,12 @@ rented box.
 
 ## Mac half — ten draws per model, 2026-09-17
 
+⚠ **The pass rate in this first table pools two tiers** — the laptop task
+`flash_attention_backward` and the two Metal tasks — into one percentage. The
+leaderboard's own rule is that tiers are never folded, so read this table as the
+mixed sweep it was and the Metal-only table beneath it for the accelerated rate;
+the task-by-task grid separates every task regardless.
+
 <!-- rendered: v2-mac -->
 | Model | Pass rate | Draws | Solved | Cost per draw | $ per solved | Wall clock | Attempts |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -44,6 +50,27 @@ rented box.
 | `gpt-5.6-terra` | **93%**, 67% to 100% by draw | 10 | 28/30 | $0.085 to $0.126 | $0.028 to $0.053 | 111 to 146s | 1 |
 | `gpt-5.6-luna` | **67%**, 0% to 100% by draw | 10 | 16/24 | $0.010 to $0.012 | $0.004 to $0.011 | 108 to 415s | 1 |
 <!-- /rendered -->
+
+### Metal only — the two accelerated tasks, with the laptop member set aside
+
+The rate above counts `flash_attention_backward` in; it is a laptop task, and
+folding it into a Metal number is the tier blend the leaderboard exists not to
+publish. The two Metal tasks on their own — which is what the accelerated half of
+this sweep actually measured:
+
+<!-- rendered: v2-mac-metal -->
+| Model | Pass rate | Solved |
+|---|---:|---:|
+| `claude-opus-5` | **85%** | 17/20 |
+| `claude-sonnet-5` | **65%** | 13/20 |
+| `claude-haiku-4-5` | **6%** | 1/18 |
+| `gpt-5.6-sol` | **70%** | 14/20 |
+| `gpt-5.6-terra` | **90%** | 18/20 |
+| `gpt-5.6-luna` | **50%** | 7/14 |
+<!-- /rendered -->
+
+`flash_attention_backward` is the laptop member and is the last row of the
+task-by-task grid below; it is not folded into the Metal rate.
 
 ### Task by task, k out of n draws
 
