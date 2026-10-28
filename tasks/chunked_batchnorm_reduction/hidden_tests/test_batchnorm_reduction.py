@@ -570,3 +570,55 @@ def test_the_inputs_are_left_alone():
 
     for original, current in zip(originals, watched):
         assert torch.equal(original, current)
+
+
+def test_the_no_grad_contract_holds_when_the_inputs_require_grad():
+    # The history test above hands in detached tensors, which an implementation
+    # can leak through and still pass. The contract says nothing you return may
+    # carry a gradient history, and nothing promised the inputs would arrive
+    # detached, so this hands in tensors that require one. The result, and the
+    # buffer the caller adds up between the two passes, must still be clean, and
+    # the inputs themselves must come back untouched.
+    case = random_case(chunk_sizes=(2, 3), seed=31)
+    x_chunks, dy_chunks, mask_chunks, gamma = case
+    x_chunks = [chunk.clone().requires_grad_(True) for chunk in x_chunks]
+    dy_chunks = [chunk.clone().requires_grad_(True) for chunk in dy_chunks]
+    gamma = gamma.clone().requires_grad_(True)
+    originals = [tensor.detach().clone() for tensor in x_chunks + dy_chunks + [gamma]]
+
+    dx_chunks, dgamma, dbeta = chunked_batchnorm_backward(
+        x_chunks, dy_chunks, mask_chunks, gamma, EPS
+    )
+    for tensor in list(dx_chunks) + [dgamma, dbeta]:
+        assert tensor.requires_grad is False
+        assert tensor.grad_fn is None
+
+    buffer = chunk_reduction(x_chunks[0], dy_chunks[0], mask_chunks[0])
+    assert buffer.requires_grad is False and buffer.grad_fn is None
+
+    for original, current in zip(originals, x_chunks + dy_chunks + [gamma]):
+        assert torch.equal(original, current.detach())
+
+
+def test_a_variance_near_the_cancellation_floor_stays_finite():
+    # The single reduction recovers the variance from raw moments, so inputs
+    # clustered far from zero drive `sum(x*x)/M - mean*mean` into cancellation:
+    # the raw variance here comes out negative at around -2e-16 while the true
+    # one is ~1e-18. With `eps` of the usual size — the domain the prompt states
+    # — `var + eps` is dominated by `eps` and stays safely positive, so the
+    # result is a real number rather than the NaN a `sqrt` of a negative would
+    # give. This is the only promise the raw-moment interface can keep on this
+    # input: the value is finite, not accurate, because `1/sqrt(var + eps)`
+    # amplifies the cancellation when the variance is this small. That loss of
+    # accuracy is ill-conditioning the prompt scopes out with "order one"; the
+    # NaN is the thing a normal `eps` must prevent, and does. A tinier `eps`
+    # than the arithmetic can carry is out of contract and not probed.
+    generator = torch.Generator().manual_seed(7)
+    x = 1.0 + torch.randn((2, 3, 4), dtype=torch.float64, generator=generator) * 1e-9
+    dy = torch.randn((2, 3, 4), dtype=torch.float64, generator=generator)
+    mask = torch.ones((2, 4), dtype=torch.bool)
+    gamma = torch.randn(3, dtype=torch.float64, generator=generator)
+
+    dx_chunks, dgamma, dbeta = chunked_batchnorm_backward([x], [dy], [mask], gamma, EPS)
+    for tensor in list(dx_chunks) + [dgamma, dbeta]:
+        assert torch.isfinite(tensor).all()
