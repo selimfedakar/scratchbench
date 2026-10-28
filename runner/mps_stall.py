@@ -42,6 +42,14 @@ STALL_THRESHOLD_S = 0.010
 #: caller never has to guess which of the two it is looking at.
 STALLED_EXIT = 125
 
+#: Written into the graded workdir the instant the gate fires, and read back by
+#: `runner/sandbox.py` to tell a real stall from a solution that merely exited
+#: 125 itself. An exit code is a number anyone can return; this file is only
+#: written on the one path that means "a stalled process refused to grade", so
+#: a `mps_stalled` verdict rests on the gate having fired rather than on a code
+#: a weak solution could hand back by accident (docs/LESSONS.md L50, F06).
+STALL_SENTINEL = "_scratchbench_stall_fired"
+
 #: The environment variable that arms the gate.
 GUARD_ENV = "SCRATCHBENCH_STALL_GUARD"
 
@@ -95,6 +103,15 @@ def pytest_configure(config) -> None:  # noqa: ANN001 — pytest's own hook sign
 
     median = probe()
     if median > STALL_THRESHOLD_S:
+        # Leave the sentinel beside the tests before exiting, so the caller can
+        # tell this stall from a solution that returned 125 on its own. Written
+        # into the current directory, which is the graded workdir pytest was
+        # launched in.
+        try:
+            with open(STALL_SENTINEL, "w") as handle:
+                handle.write(f"{median * 1000:.1f}\n")
+        except OSError:
+            pass
         pytest.exit(
             f"mps stall guard: round trip median {median * 1000:.1f}ms exceeds "
             f"{STALL_THRESHOLD_S * 1000:.0f}ms, this process cannot grade "
