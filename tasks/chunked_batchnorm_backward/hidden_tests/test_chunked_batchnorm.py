@@ -582,3 +582,34 @@ def test_the_inputs_are_left_alone():
 
     for original, current in zip(originals, watched):
         assert torch.equal(original, current)
+
+
+def test_the_no_grad_contract_holds_when_the_inputs_require_grad():
+    # The history test above hands in detached tensors, which an implementation
+    # can leak through and still pass. The contract says nothing you return may
+    # carry a gradient history, and nothing promised the inputs would arrive
+    # detached, so this hands in tensors that require one. The parameter
+    # gradients a chunk produces and the input gradients both have to come back
+    # clean, and the inputs themselves untouched.
+    case = random_case(chunk_sizes=(2, 3), seed=31)
+    x_chunks, dy_chunks, mask_chunks, gamma = case
+    mean, var = statistics(joined(x_chunks), joined(mask_chunks))
+    x_chunks = [chunk.clone().requires_grad_(True) for chunk in x_chunks]
+    dy_chunks = [chunk.clone().requires_grad_(True) for chunk in dy_chunks]
+    gamma = gamma.clone().requires_grad_(True)
+    originals = [tensor.detach().clone() for tensor in x_chunks + dy_chunks + [gamma]]
+
+    dx_chunks, dgamma, dbeta = chunked_batchnorm_backward(
+        x_chunks, dy_chunks, mask_chunks, mean, var, gamma, EPS
+    )
+    for tensor in list(dx_chunks) + [dgamma, dbeta]:
+        assert tensor.requires_grad is False
+        assert tensor.grad_fn is None
+
+    chunk_dgamma, chunk_dbeta = chunk_parameter_gradients(
+        x_chunks[0], dy_chunks[0], mask_chunks[0], mean, var, EPS
+    )
+    assert chunk_dgamma.grad_fn is None and chunk_dbeta.grad_fn is None
+
+    for original, current in zip(originals, x_chunks + dy_chunks + [gamma]):
+        assert torch.equal(original, current.detach())
