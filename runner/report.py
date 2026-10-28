@@ -4,9 +4,44 @@ from __future__ import annotations
 
 import json
 import platform
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def git_provenance() -> dict[str, str | bool | None]:
+    """`{"commit": <sha>, "dirty": <bool>}` for the tree this run came from.
+
+    Both are `None` when the code is not a git checkout — an installed wheel, a
+    download — because the honest answer there is "unknown", not a guess. A run
+    produced from uncommitted changes is marked `dirty`, so a result can never
+    silently claim to come from a commit it does not match.
+    """
+    def _git(*args: str) -> str | None:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(_REPO_ROOT), *args],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if out.returncode != 0:
+            return None
+        return out.stdout
+
+    head = _git("rev-parse", "HEAD")
+    if head is None:
+        return {"commit": None, "dirty": None}
+    status = _git("status", "--porcelain")
+    return {
+        "commit": head.strip(),
+        "dirty": bool(status.strip()) if status is not None else None,
+    }
 
 from . import __version__ as HARNESS_VERSION
 from .sandbox import HARNESS_FAILURES, NO_EVIDENCE, STATUSES, Outcome
@@ -23,7 +58,14 @@ from .tasks import Task
 #: must treat a missing `failed_tests` as unknown rather than as empty. There is
 #: no way to backfill it — the names were never written down — which is the
 #: whole reason this exists (`docs/LESSONS.md` L45).
-RESULTS_VERSION = 3
+#:
+#: Bumped to 4 when `environment` gained `commit` and `dirty`: the git revision
+#: the run was produced from, and whether the tree had uncommitted changes. A
+#: result is only reproducible against the code that made it, and until now the
+#: file did not say which code that was. Older files leave both absent, which
+#: reads as "provenance not recorded" rather than "clean at an unknown commit" —
+#: the same refusal to fabricate as `failed_tests` and `task_version` (F07).
+RESULTS_VERSION = 4
 
 #: The tier the headline `pass_rate` is computed over, and the only one it is
 #: ever computed over. Every document in this repository says the leaderboard
@@ -121,6 +163,10 @@ def build_payload(
             "python": platform.python_version(),
             "platform": platform.platform(),
             "executable": sys.executable,
+            # The code this run came from. A result nobody can tie to a revision
+            # is a number without a provenance; `dirty` is the honesty valve, so
+            # a run off uncommitted changes can never pass as a committed one.
+            **git_provenance(),
         },
         "tasks": [
             {
@@ -350,10 +396,25 @@ def group_draws(payloads: list[dict]) -> dict[tuple, list[dict]]:
 
     A different task set is a different question and a different model is the
     whole point, so neither is folded either.
+
+    Coverage is keyed on `(slug, task_version)`, not slug alone. A task whose
+    prompt or tests changed is a different question even under the same name, so
+    draws taken before and after a version bump are different experiments and
+    folding them would report a spread that spans a contract change as if it were
+    the model sampling (F07). A file written before task versions were recorded
+    leaves `task_version` absent; it is kept as `None` rather than assumed to be
+    version 1, so unversioned draws group with each other and not with an
+    explicit version — legacy provenance is incomplete, and incomplete is not
+    the same as "version 1".
     """
     groups: dict[tuple, list[dict]] = {}
     for payload in payloads:
-        coverage = tuple(sorted(entry["slug"] for entry in payload["tasks"]))
+        coverage = tuple(
+            sorted(
+                (entry["slug"], entry.get("task_version"))
+                for entry in payload["tasks"]
+            )
+        )
         key = (payload["model"], str(payload.get("task_set", "?")), coverage)
         groups.setdefault(key, []).append(payload)
     return groups
