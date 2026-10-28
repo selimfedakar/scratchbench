@@ -56,6 +56,13 @@ import torch
 COUNT, SUM_X, SUM_XX, SUM_DY, SUM_DYX = range(5)
 
 
+# Every public entry point runs under no_grad. Nothing here is meant to be
+# differentiated through — the backward pass is computed by hand — and an input
+# that happens to require a gradient would otherwise leave its history on the
+# buffer and on every returned gradient. The decorator is the whole of the
+# "nothing you return may carry a gradient history" contract, and it touches
+# nothing the arithmetic does.
+@torch.no_grad()
 def chunk_reduction(x_chunk, dy_chunk, mask_chunk):
     """The five per-channel sums this solution needs from the whole batch."""
     keep = mask_chunk[:, None, :].to(x_chunk.dtype)
@@ -85,6 +92,7 @@ def _unpack(reduction_total, eps):
     return count, mean, inv_std, dgamma, dbeta
 
 
+@torch.no_grad()
 def chunk_input_gradients(x_chunk, dy_chunk, mask_chunk, gamma, eps, reduction_total):
     """The gradient with respect to this chunk's inputs."""
     count, mean, inv_std, dgamma, dbeta = _unpack(reduction_total, eps)
@@ -101,6 +109,7 @@ def chunk_input_gradients(x_chunk, dy_chunk, mask_chunk, gamma, eps, reduction_t
     return (gamma * inv_std)[None, :, None] * (dy - correction) * keep
 
 
+@torch.no_grad()
 def chunked_batchnorm_backward(x_chunks, dy_chunks, mask_chunks, gamma, eps):
     """Reduce once over the chunks, then walk them again.
 
