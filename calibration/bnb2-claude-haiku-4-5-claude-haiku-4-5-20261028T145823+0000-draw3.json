@@ -1,0 +1,68 @@
+{
+  "results_version": 4,
+  "harness_version": "0.1.0",
+  "model": "claude-haiku-4-5",
+  "run_at": "2026-10-28T14:58:23+00:00",
+  "task_set": "warmup",
+  "headline_tier": "laptop",
+  "pass_rate": 0.0,
+  "measured": 1,
+  "not_measured": 0,
+  "pass_rate_by_category": {
+    "training": 0.0
+  },
+  "pass_rate_by_tier": {
+    "laptop": {
+      "pass_rate": 0.0,
+      "solved": 0,
+      "measured": 1,
+      "total": 1,
+      "no_accelerator": 0,
+      "no_evidence": 0,
+      "categories": {
+        "training": 0.0
+      }
+    }
+  },
+  "attempts": 1,
+  "repeat": {
+    "group": "claude-haiku-4-5-20261028T145710",
+    "index": 3,
+    "of": 10
+  },
+  "wall_clock_s": 16.39,
+  "usd_cost": 0.010345,
+  "tokens": {
+    "input": 1755,
+    "output": 1718,
+    "cache_read": 0,
+    "cache_write": 0
+  },
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+    "executable": "/usr/local/bin/python",
+    "commit": null,
+    "dirty": null
+  },
+  "tasks": [
+    {
+      "slug": "chunked_batchnorm_backward",
+      "category": "training",
+      "tier": "laptop",
+      "difficulty": 4,
+      "task_version": 2,
+      "passed": false,
+      "status": "failed",
+      "duration_s": 2.24,
+      "counts": {
+        "failed": 1,
+        "passed": 44
+      },
+      "failed_tests": [
+        "test_chunked_batchnorm.py::test_the_no_grad_contract_holds_when_the_inputs_require_grad"
+      ],
+      "detail": ""
+    }
+  ]
+}
