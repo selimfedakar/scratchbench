@@ -47,6 +47,12 @@ from __future__ import annotations
 import torch
 
 
+# Every function here runs under no_grad, public or not. The backward pass is
+# computed by hand, nothing is meant to be differentiated through, and an input
+# that happens to require a gradient would otherwise leave its history on every
+# returned tensor. The decorator is the whole of the "nothing you return may
+# carry a gradient history" contract and changes none of the arithmetic.
+@torch.no_grad()
 def _standardise(x_chunk, mask_chunk, mean, var, eps):
     """`(xhat, keep)` for one chunk, both broadcast to the chunk's own shape.
 
@@ -61,6 +67,7 @@ def _standardise(x_chunk, mask_chunk, mean, var, eps):
     return deviation / torch.sqrt(var + eps)[None, :, None] * keep, keep
 
 
+@torch.no_grad()
 def chunk_parameter_gradients(x_chunk, dy_chunk, mask_chunk, mean, var, eps):
     """One chunk's share of `(dgamma, dbeta)`.
 
@@ -72,6 +79,7 @@ def chunk_parameter_gradients(x_chunk, dy_chunk, mask_chunk, mean, var, eps):
     return (dy * x_hat).sum(dim=(0, 2)), dy.sum(dim=(0, 2))
 
 
+@torch.no_grad()
 def chunk_input_gradients(
     x_chunk,
     dy_chunk,
@@ -103,6 +111,7 @@ def chunk_input_gradients(
     return scale * (dy - correction) * keep
 
 
+@torch.no_grad()
 def chunked_batchnorm_backward(x_chunks, dy_chunks, mask_chunks, mean, var, gamma, eps):
     """Walk the chunks twice: parameter gradients first, then input gradients.
 
