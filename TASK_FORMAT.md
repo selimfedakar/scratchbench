@@ -25,9 +25,17 @@ time_limit_s: 120              # wall clock for the hidden tests alone
 tier: laptop                   # laptop (default) | accelerated
 requires_gpu: false            # true is allowed only on the accelerated tier
 deps: [numpy]                  # beyond the standard library and pytest
+hidden_tests: 26               # required: the collected count, re-derived by `validate`
 added: 2026-07-26
 frozen_set: v1
 ```
+
+`hidden_tests` is the number of tests the reference run reports as passed, and it
+is checked in as evidence rather than counted on the fly — `fused_rmsnorm_kernel`
+imports triton, which has no CPU wheel, so a renderer that collected the suites
+would crash on CI. `validate` re-derives it wherever the task can actually run,
+and `grade` treats a run that judged a different number as not having finished,
+so the count is load-bearing rather than decorative (`docs/LESSONS.md` L50).
 
 ## Frozen sets, and how a task gets into one
 
