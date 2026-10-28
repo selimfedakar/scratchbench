@@ -43,7 +43,10 @@ jobs:
       # Both commands default to the laptop tier, which is the point: this job
       # has no GPU, so it neither runs the accelerated tasks nor pretends to.
       - name: Validate every task
-        run: scratchbench validate --verbose
+        # --strict so a laptop task that cannot be checked here — a missing
+        # dependency, which in CI's installed environment means a broken task —
+        # fails the build instead of passing as a quiet "skipped" line.
+        run: scratchbench validate --strict --verbose
 
       - name: Control run through the full harness
         run: scratchbench run --model reference --tasks all --no-write
@@ -80,6 +83,13 @@ jobs:
       # so a count that drifts fails the build instead of greeting readers.
       - name: The README's counts match the task directories
         run: python tools/render_readme.py --check
+
+      # The pass-rate figure is a claim too, so it is generated from the same
+      # calibration blocks and diffed here. A chart that no longer matches the
+      # draws behind it fails the build rather than sitting on the front page
+      # past the sweep that moved it.
+      - name: The pass-rate chart matches the calibration blocks
+        run: python tools/render_chart.py --check
 
 # There is no accelerated job here, and its absence is a decision rather than an
 # omission. Running the accelerated tier in CI means attaching a self-hosted
