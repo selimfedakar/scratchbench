@@ -1,5 +1,5 @@
 slug: chunked_batchnorm_backward
-version: 1
+version: 2
 category: training
 difficulty: 4
 probes: >
@@ -13,7 +13,7 @@ time_limit_s: 180
 tier: laptop
 requires_gpu: false
 deps: [torch]
-hidden_tests: 44
+hidden_tests: 45
 added: 2026-09-04
 # Written 2026-09-04 as laptop candidate 2, against docs/LESSONS.md L28's
 # mechanism rather than V2_DESIGN.md 2.0's hazard clause. Selim chose that on
@@ -44,16 +44,22 @@ added: 2026-09-04
 # split invariance. Opus and Sonnet both write the correction in a single line
 # straight out of the two arguments.
 frozen_set: warmup
+# Version 2 (2026-10-16): every function now runs under no_grad, so a
+# gradient-requiring input cannot leave its history on the returned gradients
+# (F04); one hidden test was added for it. Re-swept against version 2 on
+# 2026-10-28 (docs/LESSONS.md L51 is closed): Opus 10/10, Sonnet 10/10, Haiku
+# 0/10 — down from 2/10 on v1, the new no_grad test taking the two Haiku draws
+# that had survived. The top two are still both 100%, so it stays warmup.
 calibration:
   - model: claude-opus-5
     draws: 10
     passed: 10
-    date: 2026-09-05
+    date: 2026-10-28
   - model: claude-sonnet-5
     draws: 10
     passed: 10
-    date: 2026-09-05
+    date: 2026-10-28
   - model: claude-haiku-4-5
     draws: 10
-    passed: 2
-    date: 2026-09-05
+    passed: 0
+    date: 2026-10-28
