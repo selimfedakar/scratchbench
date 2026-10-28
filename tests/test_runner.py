@@ -453,6 +453,62 @@ def test_a_solution_missing_a_name_the_tests_import_is_also_its_failure(tmp_path
     assert not outcome.passed
 
 
+def test_a_solution_that_exits_zero_before_the_tests_run_is_not_a_pass(tmp_path):
+    # F01, the worst of them: the file the model fills calls os._exit(0), so the
+    # process that was meant to run the hidden tests dies with a success code
+    # having judged nothing. pytest exits 0, and `0 passed` was read as a pass.
+    # The completeness gate catches the gap — the declared count is not met —
+    # and the starter imports cleanly by contract, so the blame is the
+    # solution's rather than the task's.
+    from runner.sandbox import NO_EVIDENCE
+
+    def exit_zero(task, workdir):
+        (Path(workdir) / "solution.py").write_text("import os\nos._exit(0)\n")
+
+    outcome = grade(load_task(make_task(tmp_path)), exit_zero)
+    assert not outcome.passed, "a solution that ran no tests was recorded as a pass"
+    assert outcome.status == "solution_error"
+    assert outcome.status not in NO_EVIDENCE
+
+
+def test_a_solution_that_shrinks_the_suite_it_is_judged_by_is_caught(tmp_path):
+    # The gate's other half: a pass requires every declared test to have run, so
+    # a solution cannot shorten the suite and have the survivors certify it. The
+    # task declares two hidden tests; the solution removes one on import. pytest
+    # errors during collection rather than quietly running the one that is left,
+    # and either way the declared count is unmet and the run is not a pass.
+    path = make_task(tmp_path, meta_overrides="hidden_tests: 2\n")
+    (path / "hidden_tests" / "test_second.py").write_text(
+        "from solution import answer\n\n\ndef test_again():\n    assert answer() == 42\n"
+    )
+
+    def delete_a_test(task, workdir):
+        (Path(workdir) / "solution.py").write_text(
+            "import os\n"
+            "os.remove('test_second.py')\n"
+            "def answer():\n    return 42\n"
+        )
+
+    outcome = grade(load_task(path), delete_a_test)
+    assert not outcome.passed, "a solution that deleted a hidden test was recorded as a pass"
+
+
+def test_a_laptop_solution_that_exits_125_is_its_failure_not_a_stall(tmp_path):
+    # F06: 125 is the stall guard's exit code, but a laptop task has no guard and
+    # writes no sentinel. A solution returning 125 on its own produced no stall,
+    # so it is the solution's abnormal exit — classified like any other broken
+    # solution — rather than dropped out of the rate as machine noise.
+    from runner.sandbox import NO_EVIDENCE
+
+    def exit_125(task, workdir):
+        (Path(workdir) / "solution.py").write_text("import os\nos._exit(125)\n")
+
+    outcome = grade(load_task(make_task(tmp_path)), exit_125)
+    assert not outcome.passed
+    assert outcome.status == "solution_error"
+    assert outcome.status not in NO_EVIDENCE
+
+
 def test_hidden_tests_that_cannot_collect_at_all_are_not_the_models_fault(tmp_path):
     # The other side of the line. Nothing about the solution explains this one,
     # so it is an absence of evidence and it breaks the run.
@@ -742,27 +798,57 @@ def test_the_guard_does_nothing_unless_the_environment_arms_it(monkeypatch):
     assert mps_stall.pytest_configure(config=None) is None
 
 
-def test_a_stalled_launch_is_retried_and_a_healthy_one_ends_the_loop(monkeypatch):
+def test_a_stalled_launch_is_retried_and_a_healthy_one_ends_the_loop(monkeypatch, tmp_path):
     from runner import sandbox
-    from runner.mps_stall import STALLED_EXIT
+    from runner.mps_stall import STALL_SENTINEL, STALLED_EXIT
 
     calls = []
 
     def fake_run_pytest(workdir, timeout_s, guarded=False):
         calls.append(guarded)
         # Stalled, stalled, then healthy: the alternation this defends against
-        # is not guaranteed to be perfect, so the loop must survive two.
+        # is not guaranteed to be perfect, so the loop must survive two. A real
+        # stall is the guard firing and leaving its sentinel behind, so the fake
+        # writes it — a bare 125 without the sentinel is the solution's own exit
+        # and is not a reason to relaunch (docs/LESSONS.md L50, F06).
         code = STALLED_EXIT if len(calls) < 3 else 1
+        if code == STALLED_EXIT:
+            (workdir / STALL_SENTINEL).write_text("stall")
+        else:
+            (workdir / STALL_SENTINEL).unlink(missing_ok=True)
         return code, "1 failed", 0.5
 
     monkeypatch.setattr(sandbox, "run_pytest", fake_run_pytest)
     returncode, output, seconds, attempts = sandbox.run_pytest_until_healthy(
-        Path("/nonexistent"), timeout_s=60, guarded=True
+        tmp_path, timeout_s=60, guarded=True
     )
     assert (returncode, attempts) == (1, 3)
     assert output == "1 failed"
     # The seconds reported are what the run cost in total, discards included.
     assert seconds == pytest.approx(1.5)
+
+
+def test_a_bare_125_without_the_sentinel_is_not_a_stall_and_is_not_retried(
+    monkeypatch, tmp_path
+):
+    # The F06 case: a guarded task whose solution returns 125 on its own, with no
+    # guard sentinel beside it. That is the solution's answer, not a stalled
+    # process, so the loop must not spend three more launches on it.
+    from runner import sandbox
+    from runner.mps_stall import STALL_SENTINEL, STALLED_EXIT
+
+    calls = []
+
+    def solution_exits_125(workdir, timeout_s, guarded=False):
+        calls.append(guarded)
+        (workdir / STALL_SENTINEL).unlink(missing_ok=True)
+        return STALLED_EXIT, "", 0.1
+
+    monkeypatch.setattr(sandbox, "run_pytest", solution_exits_125)
+    returncode, _, _, attempts = sandbox.run_pytest_until_healthy(
+        tmp_path, timeout_s=60, guarded=True
+    )
+    assert (returncode, attempts, calls) == (STALLED_EXIT, 1, [True])
 
 
 def test_an_unguarded_task_is_never_relaunched(monkeypatch):
@@ -787,9 +873,11 @@ def test_every_attempt_stalling_is_reported_as_no_evidence(monkeypatch):
     # recorded as a `timeout`, which is evidence and a failure, and therefore a
     # published claim about a model that describes the machine instead.
     from runner import sandbox
-    from runner.mps_stall import MAX_ATTEMPTS, STALLED_EXIT
+    from runner.mps_stall import MAX_ATTEMPTS, STALL_SENTINEL, STALLED_EXIT
 
     def always_stalled(workdir, timeout_s, guarded=False):
+        # A real stall: the guard fired and left its sentinel in the workdir.
+        (workdir / STALL_SENTINEL).write_text("stall")
         return STALLED_EXIT, "", 0.1
 
     monkeypatch.setattr(sandbox, "run_pytest", always_stalled)
@@ -805,6 +893,36 @@ def test_every_attempt_stalling_is_reported_as_no_evidence(monkeypatch):
     assert outcome.status == "mps_stalled"
     assert outcome.status in sandbox.NO_EVIDENCE
     assert str(MAX_ATTEMPTS) in outcome.detail
+
+
+# -- the graded environment ------------------------------------------------
+
+
+def test_the_graded_environment_strips_credentials(monkeypatch):
+    # F02's cheap half. The adapter runs in the parent process, where the keys
+    # live and are needed; the grading child only runs pytest over a file already
+    # on disk, so a credential has no business reaching it. A variable whose name
+    # looks like a secret is removed before the child sees it, which keeps a
+    # generated solution from reading the key that paid for it. This is not
+    # isolation — the solution still shares the interpreter and the filesystem,
+    # and grade()'s docstring and the README say so — but the one secret the
+    # harness itself introduces does not leak.
+    from runner.sandbox import pytest_environment
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-not-a-real-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-also-fake")
+    monkeypatch.setenv("SOME_SERVICE_TOKEN", "hunter2")
+    monkeypatch.setenv("SCRATCHBENCH_HARMLESS", "fine")
+
+    env = pytest_environment()
+
+    assert "ANTHROPIC_API_KEY" not in env
+    assert "OPENAI_API_KEY" not in env
+    assert "SOME_SERVICE_TOKEN" not in env
+    # A benign variable is left alone, and the deterministic pins are still set.
+    assert env.get("SCRATCHBENCH_HARMLESS") == "fine"
+    assert env["PYTHONHASHSEED"] == "0"
+    assert env["OMP_NUM_THREADS"] == "1"
 
 
 # -- reading pytest's summary line ----------------------------------------
@@ -882,8 +1000,14 @@ def test_the_run_table_renders(tmp_path):
 # several of them.
 
 
-def _draw(model: str, statuses: dict[str, bool], task_set: str = "v1") -> dict:
-    """A results document with a chosen outcome per task, for the aggregation."""
+def _draw(
+    model: str, statuses: dict[str, bool], task_set: str = "v1", version: int | None = None
+) -> dict:
+    """A results document with a chosen outcome per task, for the aggregation.
+
+    `version` sets `task_version` on every task entry when given; left off, the
+    entries carry none, mirroring a file written before task versions existed.
+    """
     return {
         "model": model,
         "task_set": task_set,
@@ -905,6 +1029,7 @@ def _draw(model: str, statuses: dict[str, bool], task_set: str = "v1") -> dict:
                 "tier": "laptop",
                 "passed": passed,
                 "status": "passed" if passed else "failed",
+                **({"task_version": version} if version is not None else {}),
             }
             for slug, passed in statuses.items()
         ],
@@ -920,11 +1045,25 @@ def test_repeated_draws_are_grouped_by_model_and_task_set():
     ]
     groups = reporting.group_draws(draws)
     assert sorted(groups) == [
-        ("claude-haiku-4-5", "v1", ("a",)),
-        ("claude-opus-5", "v1", ("a",)),
-        ("claude-opus-5", "v2", ("a",)),
+        ("claude-haiku-4-5", "v1", (("a", None),)),
+        ("claude-opus-5", "v1", (("a", None),)),
+        ("claude-opus-5", "v2", (("a", None),)),
     ]
-    assert len(groups[("claude-opus-5", "v1", ("a",))]) == 2
+    assert len(groups[("claude-opus-5", "v1", (("a", None),))]) == 2
+
+
+def test_draws_of_different_task_versions_are_not_one_experiment():
+    # F07: the same slug at two versions is two questions. A draw taken against
+    # version 1's tests and one taken against version 2's must not share an error
+    # bar — the spread between them would measure a contract change, not the
+    # model. They land in two groups, not one.
+    draws = [
+        _draw("claude-opus-5", {"a": True}, version=1),
+        _draw("claude-opus-5", {"a": False}, version=2),
+    ]
+    groups = reporting.group_draws(draws)
+    assert len(groups) == 2
+    assert all(len(members) == 1 for members in groups.values())
 
 
 def test_a_one_task_probe_run_is_not_a_draw_of_the_full_sweep():
@@ -1016,6 +1155,41 @@ def test_validate_passes_on_the_real_task_set(capsys):
 
     assert main(["validate", "--tasks", "bpe_merge_order"]) == 0
     assert "validated" in capsys.readouterr().out
+
+
+def test_validate_does_not_count_a_task_with_a_missing_dependency(
+    monkeypatch, tmp_path, capsys
+):
+    # F03: a task that declares a dependency not importable here never ran, so it
+    # is not validated. It used to be counted anyway — the summary said
+    # "1 task(s) validated" for a task nothing checked. Now it is reported as
+    # skipped and kept off the total.
+    from runner import cli
+
+    path = make_task(tmp_path, meta_overrides="deps: [no_such_module_scratchbench_47]\n")
+    task = load_task(path)
+    monkeypatch.setattr(cli, "select_tasks", lambda *a, **k: [task])
+
+    assert cli.main(["validate"]) == 0
+    out = capsys.readouterr().out
+    assert "0 task(s) validated" in out
+    assert "1 task(s) skipped (missing dependency)" in out
+
+
+def test_strict_validate_fails_when_a_task_could_not_be_checked(
+    monkeypatch, tmp_path, capsys
+):
+    # The strict policy the launch CI uses: a missing dependency, which in an
+    # environment meant to have it is a broken task, becomes a non-zero exit
+    # rather than a quiet line under a green run.
+    from runner import cli
+
+    path = make_task(tmp_path, meta_overrides="deps: [no_such_module_scratchbench_47]\n")
+    task = load_task(path)
+    monkeypatch.setattr(cli, "select_tasks", lambda *a, **k: [task])
+
+    assert cli.main(["validate", "--strict"]) == 1
+    assert "strict" in capsys.readouterr().out
 
 
 def test_validate_does_not_count_what_it_could_not_run(capsys):
@@ -1627,7 +1801,34 @@ def test_a_pass_carries_an_empty_list_rather_than_nothing():
         "dummy", tasks, [grade(tasks[0], reference_solve)], wall_clock_s=1.0
     )
     assert payload["tasks"][0]["failed_tests"] == []
-    assert payload["results_version"] == 3
+    assert payload["results_version"] == 4
+
+
+def test_a_run_records_the_commit_it_came_from(monkeypatch):
+    # F07: a result is only reproducible against the code that produced it. The
+    # run records the git revision and whether the tree was dirty, so a number
+    # can be tied back to a commit — and a run off uncommitted changes is marked
+    # rather than passing as a committed one.
+    tasks = select_tasks(TASKS_ROOT, "softmax_stability")
+    payload = reporting.build_payload(
+        "dummy", tasks, [grade(tasks[0], reference_solve)], wall_clock_s=1.0
+    )
+    env = payload["environment"]
+    assert "commit" in env and "dirty" in env
+    # This repository is a git checkout, so the commit resolves and dirty is a
+    # bool rather than the None that an installed wheel would record.
+    assert env["commit"] is None or len(env["commit"]) == 40
+    assert env["dirty"] in (True, False, None)
+
+
+def test_git_provenance_is_none_outside_a_checkout(monkeypatch):
+    # An installed wheel or a plain download is not a git tree. The honest answer
+    # there is "unknown", not a fabricated clean commit.
+    def not_git(*args, **kwargs):
+        raise OSError("git not found")
+
+    monkeypatch.setattr(reporting.subprocess, "run", not_git)
+    assert reporting.git_provenance() == {"commit": None, "dirty": None}
 
 
 def test_every_published_results_file_still_reads_after_the_bump():
@@ -1650,6 +1851,48 @@ def test_every_published_results_file_still_reads_after_the_bump():
             assert "failed_tests" not in entry or isinstance(
                 entry["failed_tests"], list
             )
+
+
+def test_a_published_set_still_contains_exactly_what_it_was_measured_on():
+    # §5.1: a numbered set's membership is frozen in leaderboard/SET_MANIFESTS.yaml
+    # and must match what the published files were actually measured over.
+    # meta.yaml's `frozen_set` is a mutable evaluation label and is deliberately
+    # not consulted here — the whole point is that the two can disagree (a task
+    # moved to warmup) without the historical row changing under it.
+    import json
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    manifests = yaml.safe_load((root / "leaderboard" / "SET_MANIFESTS.yaml").read_text())
+
+    measured: dict[str, dict[str, set]] = {}
+    for path in sorted(root.glob("leaderboard/**/*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        task_set = payload.get("task_set")
+        if not isinstance(task_set, str) or task_set not in manifests:
+            continue
+        for entry in payload["tasks"]:
+            measured.setdefault(task_set, {}).setdefault(entry["tier"], set()).add(
+                entry["slug"]
+            )
+
+    for name, manifest in manifests.items():
+        recorded = {tier: set(manifest.get(tier) or []) for tier in ("laptop", "accelerated")}
+        found = {
+            tier: measured.get(name, {}).get(tier, set()) for tier in ("laptop", "accelerated")
+        }
+        assert found == recorded, f"{name}: leaderboard coverage {found} != manifest {recorded}"
+
+
+def test_a_missing_tasks_directory_says_to_run_from_a_clone(tmp_path):
+    # F08: the tasks ship with the source, not a wheel. An install with no tasks
+    # directory should say what to do — run from a clone — rather than leave a
+    # bare "not a directory" to read as a corrupt package.
+    from runner.tasks import TaskError, discover_tasks
+
+    with pytest.raises(TaskError, match="clone"):
+        discover_tasks(tmp_path / "nonexistent")
 
 
 def test_cost_per_solved_divides_by_what_the_run_actually_solved():
@@ -1977,6 +2220,53 @@ def test_every_readme_region_has_a_renderer():
     assert all(name in rr.RENDERERS for name in names)
 
 
+def _chart_renderer():
+    import importlib.util
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "render_chart", root / "tools" / "render_chart.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_pass_rate_chart_matches_the_calibration_blocks():
+    # The same assertion CI makes. A figure is a claim, and this one is generated
+    # from the calibration blocks rather than drawn, so the committed SVG and the
+    # draws behind it cannot disagree without the build going red.
+    from runner.tasks import discover_tasks
+
+    rc = _chart_renderer()
+    rendered = rc.render(discover_tasks(TASKS_ROOT))
+    assert rc.OUT.read_text(encoding="utf-8") == rendered, (
+        "docs/pass-rates.svg is out of date; run tools/render_chart.py"
+    )
+
+
+def test_the_chart_reads_only_entries_above_the_draw_floor():
+    # A calibration entry too small to admit a task is too small to draw a bar
+    # for, the same absence-of-evidence rule the admission logic follows.
+    rc = _chart_renderer()
+
+    class _Cal:
+        def __init__(self, model, passed, draws):
+            self.model, self.passed, self.draws = model, passed, draws
+
+    class _Task:
+        slug = "t"
+        frozen_set = "warmup"
+        calibration = [
+            _Cal("claude-opus-5", 2, 2),      # below MIN_DRAWS, must be dropped
+            _Cal("claude-sonnet-5", 9, 10),
+            _Cal("claude-haiku-4-5", 0, 10),
+        ]
+
+    rows = rc._rows([_Task()])
+    assert rows == [("t", "warmup", [("claude-sonnet-5", 9, 10), ("claude-haiku-4-5", 0, 10)])]
+
+
 def test_a_baseline_that_stalled_is_not_reported_as_a_broken_task(monkeypatch):
     # `starter_collects_cleanly` decides which side of the evidence line a
     # collection error falls on, and it answers with a bool. A baseline run
@@ -1989,7 +2279,7 @@ def test_a_baseline_that_stalled_is_not_reported_as_a_broken_task(monkeypatch):
     # on, because it is the alarm that says every number measured against the
     # task is void.
     from runner import sandbox
-    from runner.mps_stall import STALLED_EXIT
+    from runner.mps_stall import STALL_SENTINEL, STALLED_EXIT
 
     assert STALLED_EXIT != sandbox.PYTEST_TESTS_FAILED
 
@@ -2000,7 +2290,10 @@ def test_a_baseline_that_stalled_is_not_reported_as_a_broken_task(monkeypatch):
     def graded_errors_then_baseline_stalls(workdir, timeout_s, guarded=False):
         calls["n"] += 1
         if calls["n"] == 1:
+            (workdir / STALL_SENTINEL).unlink(missing_ok=True)
             return 2, "1 error in 0.10s", 0.1
+        # The baseline stall is the guard firing and leaving its sentinel.
+        (workdir / STALL_SENTINEL).write_text("stall")
         return STALLED_EXIT, "", 0.1
 
     monkeypatch.setattr(sandbox, "run_pytest", graded_errors_then_baseline_stalls)
