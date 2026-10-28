@@ -1,5 +1,5 @@
 slug: chunked_batchnorm_reduction
-version: 1
+version: 2
 category: training
 difficulty: 5
 probes: >
@@ -12,7 +12,7 @@ time_limit_s: 180
 tier: laptop
 requires_gpu: false
 deps: [torch]
-hidden_tests: 57
+hidden_tests: 59
 added: 2026-09-06
 # Laptop candidate 3, written against ROADMAP.md 9.3: both halves of the laptop
 # criterion rather than the first one only. Candidate 2,
@@ -55,16 +55,32 @@ frozen_set: warmup
 # got wrong, which is L21 in a new costume. It is a real, calibrated task that
 # separates Haiku cleanly and it ships as one; it is not evidence about the
 # laptop tier. See ROADMAP.md 9.4.
+# Version 2 (2026-10-16): the reference now runs under no_grad so a
+# gradient-requiring input cannot leave its history on the result (F04), and the
+# prompt states the numerical domain the single-reduction interface can keep —
+# `eps` of conventional size, over which `var + eps` stays positive — rather than
+# promising stability for an `eps` driven below the raw-moment cancellation floor
+# (F05). Two hidden tests were added for those. Re-swept against version 2 on
+# 2026-10-28 (docs/LESSONS.md L51 is closed): Opus 8/10, Sonnet 9/10, Haiku
+# 0/10. The two new tests cost Opus one draw and Sonnet one, so the top two are
+# no longer both 100% and the admission rule would now ADMIT it — but it stays
+# warmup by judgement, which is L45 a second time. Opus's two losses and
+# Sonnet's one fail every chunk size including chunk_sizes0, the single-chunk
+# split where the mistake this task is named after is correct by construction,
+# so they are wholesale-wrong draws rather than the chunked-reduction mechanism.
+# A rate that clears the admission bar on draws that never exercise the mechanism
+# is L45, and admitting on it would publish a laptop number the field did not
+# actually earn. See docs/LESSONS.md L56 and ROADMAP.md 9.4.
 calibration:
   - model: claude-opus-5
     draws: 10
-    passed: 9
-    date: 2026-09-06
+    passed: 8
+    date: 2026-10-28
   - model: claude-sonnet-5
     draws: 10
-    passed: 10
-    date: 2026-09-08
+    passed: 9
+    date: 2026-10-28
   - model: claude-haiku-4-5
     draws: 10
     passed: 0
-    date: 2026-09-08
+    date: 2026-10-28
