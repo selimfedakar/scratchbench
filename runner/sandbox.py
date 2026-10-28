@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .mps_stall import GUARD_ENV, MAX_ATTEMPTS, STALLED_EXIT
+from .mps_stall import GUARD_ENV, MAX_ATTEMPTS, STALL_SENTINEL, STALLED_EXIT
 from .tasks import Task, available_accelerators
 
 #: The name the stall guard is copied into a graded workdir under. Distinctive
@@ -208,9 +208,35 @@ def add_stall_guard(task: Task, workdir: Path) -> bool:
     return True
 
 
+#: Substrings (case-insensitive) that mark an environment variable as a
+#: credential. The graded child has no business reading any of them: the model's
+#: answer is written by the adapter in the *parent* process, where the keys live
+#: and are needed, and the child only runs pytest over a file that is already on
+#: disk. Stripping these keeps a generated solution from reading the key that
+#: paid for it. This is the cheap half of F02, and it is not a security boundary
+#: — a solution runs in the same interpreter as the grader and a denylist cannot
+#: see a credential whose name does not say so. The honest limit is in `grade`'s
+#: docstring and in the README; this only removes the one secret the harness
+#: itself introduces.
+SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL")
+
+
+def is_secret_env(name: str) -> bool:
+    upper = name.upper()
+    return any(marker in upper for marker in SECRET_ENV_MARKERS)
+
+
 def pytest_environment(guarded: bool = False) -> dict[str, str]:
-    """A deterministic, offline environment for the graded run."""
-    env = dict(os.environ)
+    """A deterministic, credential-stripped environment for the graded run.
+
+    Deterministic because the thread and hash seeds are pinned; credential-
+    stripped because anything that looks like a key is removed before the child
+    sees it. It is not an isolated environment: the child still inherits the
+    rest of the parent's variables and the parent's filesystem access, and the
+    README says so plainly. Real isolation is a disposable container or VM, which
+    is its own work rather than a line here (docs/LESSONS.md F02).
+    """
+    env = {name: value for name, value in os.environ.items() if not is_secret_env(name)}
     env["PYTHONHASHSEED"] = "0"
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     # Thread counts change floating-point reduction order in numpy and torch,
@@ -226,10 +252,24 @@ def pytest_environment(guarded: bool = False) -> dict[str, str]:
     return env
 
 
+def stall_fired(workdir: Path) -> bool:
+    """Did the stall guard write its sentinel into `workdir` on the last run?
+
+    This is what separates `mps_stalled` — a stalled process the guard refused
+    to grade in — from a solution that merely called `os._exit(125)` on its own.
+    Both produce the same exit code; only the guard writes the file, and only on
+    a Metal task where the guard is armed (docs/LESSONS.md L50, F06).
+    """
+    return (workdir / STALL_SENTINEL).exists()
+
+
 def run_pytest(
     workdir: Path, timeout_s: int, guarded: bool = False
 ) -> tuple[int | None, str, float]:
     """Run the tests in `workdir`. Returns (returncode, output, seconds)."""
+    # Clear any sentinel a previous attempt left, so `stall_fired` reflects this
+    # run and not the last one.
+    (workdir / STALL_SENTINEL).unlink(missing_ok=True)
     command = [
         sys.executable,
         "-m",
@@ -284,7 +324,10 @@ def run_pytest_until_healthy(
     for attempts in range(1, (MAX_ATTEMPTS if guarded else 1) + 1):
         returncode, output, elapsed = run_pytest(workdir, timeout_s, guarded)
         total += elapsed
-        if returncode != STALLED_EXIT:
+        # Relaunch only for a stall the guard actually reported. A bare 125 from
+        # the solution itself is its own answer, not a reason to spend three more
+        # processes looking for a healthy one.
+        if not (returncode == STALLED_EXIT and stall_fired(workdir)):
             break
     return returncode, output, total, attempts
 
@@ -323,7 +366,7 @@ def starter_collects_cleanly(task: Task) -> bool | None:
         returncode, output, _, attempts = run_pytest_until_healthy(
             baseline, task.time_limit_s, guarded
         )
-        if guarded and returncode == STALLED_EXIT:
+        if guarded and returncode == STALLED_EXIT and stall_fired(baseline):
             return None
         return returncode == PYTEST_TESTS_FAILED and not parse_summary(output).get("error")
     finally:
@@ -341,6 +384,19 @@ def grade(task: Task, solve, keep_workdir: Path | None = None) -> Outcome:
 
     `solve(task, workdir)` is called with a directory holding the starter
     files. Whatever it leaves behind is what gets tested.
+
+    Trust boundary, stated plainly because the comments elsewhere imply more
+    than is true. The solution is arbitrary Python and pytest runs it in the
+    same interpreter as the tests, in a subprocess that inherits this machine's
+    filesystem and most of its environment. Credential-shaped variables are
+    stripped (`pytest_environment`), and the hidden tests are only copied in
+    after the solver has written, so a solver cannot read a test that is not yet
+    on disk — but neither of those is a security sandbox. There is no network
+    block, no memory limit, and no filesystem jail: generated code can read
+    outside the workdir and reach the network. Run a model's output the way you
+    would run any untrusted code — on a machine or in a disposable container you
+    are willing to hand it — until the isolated grading path F02 calls for
+    exists. The README's "Running generated code" note says the same thing.
     """
     if task.requires_gpu and task.accelerator not in available_accelerators():
         # Neither a pass nor a failure: this machine cannot produce evidence
@@ -392,7 +448,7 @@ def grade(task: Task, solve, keep_workdir: Path | None = None) -> Outcome:
             workdir, task.time_limit_s, guarded
         )
 
-        if returncode == STALLED_EXIT:
+        if guarded and returncode == STALLED_EXIT and stall_fired(workdir):
             return Outcome(
                 slug=task.slug,
                 passed=False,
@@ -418,14 +474,30 @@ def grade(task: Task, solve, keep_workdir: Path | None = None) -> Outcome:
 
         counts = parse_summary(output)
         detail = ""
-        if returncode == PYTEST_ALL_PASSED:
+        # A verdict means the suite ran every hidden test and reached the end.
+        # The exit code does not prove that on its own: a solution that calls
+        # os._exit(0) while its module is imported kills the process with a
+        # success code having judged nothing, and `0 passed` would otherwise be
+        # read as a pass. `hidden_tests` is the declared count, re-derived by
+        # `validate` on hardware that can run the task, so comparing the graded
+        # run against it turns "the process exited 0" into "every test ran and
+        # passed" (docs/LESSONS.md L50, F01).
+        judged = counts.get("passed", 0) + counts.get("failed", 0)
+        complete = (
+            returncode in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED)
+            and not counts.get("error")
+            and judged == task.hidden_tests
+        )
+        if complete and returncode == PYTEST_ALL_PASSED:
             status = "passed"
-        elif returncode == PYTEST_TESTS_FAILED and not counts.get("error"):
+        elif complete and returncode == PYTEST_TESTS_FAILED:
             status = "failed"
         else:
-            # Nothing was judged. Two very different reasons look identical in
-            # pytest's exit code, and they belong on opposite sides of the
-            # evidence line, so the solution is asked to import on its own.
+            # Nothing was judged to completion. Several very different reasons
+            # look identical in pytest's exit code — a collection error, an
+            # early exit, a suite that ran a fraction of its tests — and they
+            # belong on opposite sides of the evidence line, so the solution is
+            # asked to import on its own.
             baseline = starter_collects_cleanly(task)
             if baseline is None:
                 # The baseline never ran, so it accused nobody. Not the task,
