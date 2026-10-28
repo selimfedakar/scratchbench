@@ -1,0 +1,54 @@
+# Frozen set manifests — what each numbered published set contained when its
+# leaderboard rows were measured.
+#
+# This is the immutable record §5.1 asks for. A set name on the leaderboard —
+# `v1`, `v2` — means the same list of tasks forever, whatever those tasks'
+# `frozen_set` field says in meta.yaml today. Membership was drifting: a task the
+# frontier later cleared was moved to `warmup`, and the same `v1` stopped naming
+# the same list. So the two ideas are split. `frozen_set` in meta.yaml is now a
+# mutable *evaluation label* — `warmup`, `saturated`, a numbered set a task is a
+# candidate for — and it may change as fresh draws come in. Set *membership* is
+# this file, and it does not.
+#
+# A test (`test_a_published_set_still_contains_exactly_what_it_was_measured_on`)
+# re-derives each set's membership from the published leaderboard files and
+# checks it against this record, so neither can drift from the other unnoticed.
+
+v1:
+  measured: 2026-08-09
+  laptop:
+    - attention_causal_mask
+    - bpe_merge_order
+    - grad_accumulation
+    - kv_cache_equivalence
+    - online_softmax_attention
+    - quantization_error_bounds
+    - sharded_dataloader
+    - softmax_stability
+  accelerated:
+    - fused_rmsnorm_kernel
+  note: >
+    Eight laptop tasks and one CUDA task, as measured. Three of the laptop
+    tasks — attention_causal_mask, sharded_dataloader, quantization_error_bounds
+    — were later labelled `warmup` in meta.yaml once the frontier cleared them.
+    That is an evaluation label and does not rewrite what v1 was: the historical
+    row stands on the eight it was measured over.
+
+v2:
+  measured: 2026-08-13
+  laptop:
+    - flash_attention_backward
+  accelerated:
+    - fused_rmsnorm_kernel
+    - metal_cross_entropy_kernel
+    - metal_softmax_backward_kernel
+  note: >
+    flash_attention_backward was v2's only laptop member. Fresh draws on
+    2026-09-17 showed the frontier clears it, so it moved to `warmup`. Then on
+    2026-10-28 fused_rmsnorm_kernel's ten-draw sweep across both vendors came back
+    with two entries at 100%, so the admission rule moved it to `warmup` too —
+    which is why the present-day v2 is two Metal tasks with no laptop and no CUDA
+    member. This manifest is unchanged: it records what the historical v2 files
+    were measured over (flash_attention_backward and the CUDA task included),
+    because the present-day set and the historical row are different things and
+    the leaderboard says which is which.
