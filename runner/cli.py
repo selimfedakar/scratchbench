@@ -67,11 +67,11 @@ def command_validate(args: argparse.Namespace) -> int:
     rows: list[list[str]] = []
     broken = 0
     checked = 0
-    unchecked: list[str] = []
+    unchecked: list[str] = []  # no accelerator for it on this machine
+    skipped: list[str] = []  # a declared dependency is not importable here
 
     for task in tasks:
         reference = grade(task, reference_solve)
-        starter = grade(task, _starter_solve)
 
         if reference.status == "needs_accelerator":
             # Unvalidatable here, and saying "ok" would be a lie. It is listed
@@ -79,6 +79,19 @@ def command_validate(args: argparse.Namespace) -> int:
             rows.append([task.slug, "-", "-", "-", f"UNCHECKED  {reference.detail}"])
             unchecked.append(task.slug)
             continue
+        if reference.status == "missing_deps":
+            # A declared dependency is not importable here. Nothing was checked,
+            # so this is not a validated task — counting it as one is exactly the
+            # bug F03 names: a task that never ran inflated the validated total.
+            # It is reported on its own line and kept out of `checked`. `--strict`
+            # turns it into a failure, because an environment that is meant to
+            # have the deps and is missing one has a broken task, not an absent
+            # accelerator.
+            rows.append([task.slug, "-", "-", "-", f"SKIPPED  {reference.detail}"])
+            skipped.append(task.slug)
+            continue
+
+        starter = grade(task, _starter_solve)
         checked += 1
 
         problems = []
@@ -109,9 +122,7 @@ def command_validate(args: argparse.Namespace) -> int:
                 f"meta.yaml declares hidden_tests: {declared}, the suite has {observed}"
             )
 
-        if reference.status == "missing_deps":
-            verdict = f"SKIPPED  {reference.detail}"
-        elif problems:
+        if problems:
             verdict = "BROKEN   " + "; ".join(problems)
             broken += 1
         else:
@@ -140,7 +151,16 @@ def command_validate(args: argparse.Namespace) -> int:
     # the total would be the report claiming evidence it does not have.
     print(f"{checked} task(s) validated: reference passes, starter fails cleanly.")
     if unchecked:
-        print(f"{len(unchecked)} task(s) not checked here: {', '.join(unchecked)}")
+        print(f"{len(unchecked)} task(s) not checked here (no accelerator): {', '.join(unchecked)}")
+    if skipped:
+        print(f"{len(skipped)} task(s) skipped (missing dependency): {', '.join(skipped)}")
+    # Strict turns "could not check everything asked for" into a non-zero exit.
+    # Default stays lenient so a laptop with no GPU is not a failing build, but a
+    # CI step that passes --strict will not go green while a task it selected
+    # went unchecked or skipped.
+    if args.strict and (unchecked or skipped):
+        print("strict: not every selected task could be validated here.")
+        return 1
     return 0
 
 
@@ -304,6 +324,15 @@ def build_parser() -> argparse.ArgumentParser:
     add_tier(validate)
     add_set(validate)
     validate.add_argument("--verbose", action="store_true", help="print pytest output for failures")
+    validate.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "exit non-zero if any selected task could not be validated here — a "
+            "missing dependency or an absent accelerator. The default is lenient "
+            "so a GPU-less laptop is not a failing build."
+        ),
+    )
     validate.set_defaults(func=command_validate)
 
     run = subparsers.add_parser("run", help="grade a model against the task set")
