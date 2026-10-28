@@ -64,7 +64,7 @@ Python is Anaconda 3.10 at `/Users/selimfedakar/anaconda3/bin/python3`.
 | `runner/mps_stall.py` | the probe for this machine's per-process MPS stall, and the pytest hook that refuses to grade in one. Copied into a Metal task's workdir beside the hidden tests. `docs/LESSONS.md` L42 |
 | `runner/cli.py` | `scratchbench run` / `report` / `validate` |
 | `runner/report.py` | results JSON schema, aggregation, the printed table |
-| `adapters/` | model adapters. `reference.py` and `anthropic_api.py` are real; the OpenAI one is a skeleton class in `model_api.py`, not its own file. |
+| `adapters/` | model adapters. `reference.py`, `anthropic_api.py` and `openai_api.py` are all real and exercised against live APIs; `model_api.py` holds the shared base and `ResponseError` they build on. |
 | `tools/` | `mutate_rmsnorm.py` and `verify_accelerated.sh` (the CUDA task's evidence, on a rented box), `mutate_metal_task.py` (both Metal tasks' evidence, on any Apple silicon Mac; `--task <slug>` runs one), `mutate_v2_tasks.py` (the same pass for the laptop-tier v2 candidates), `check_cost.py` (every published cost, re-derived from its tokens), `check_calibration.py` (every `calibration:` block, re-derived from its draws), `check_mps_stall.py` (the launch survey behind L42; imports the probe from `runner/mps_stall.py` rather than holding a second copy of the threshold) |
 | `results/` | one JSON per run, gitignored except `.gitkeep` |
 | `leaderboard/` | published results, checked in by hand |
@@ -213,6 +213,44 @@ computed over. `accelerated` may set `requires_gpu: true` and must declare
 folded into it. Missing hardware returns `needs_accelerator` — not a pass, not
 a failure, an absence of evidence. An accelerated task stays out of the frozen
 set until its reference has actually run on hardware. See `TASK_FORMAT.md`.
+
+## State as of 2026-10-28, session 24 (verify before trusting)
+
+- ⭐ **The CUDA box ran and it shrank `v2`.** `fused_rmsnorm_kernel` finished at
+  ten draws per model across both vendors on a rented RTX 4090: Opus 5/10 (all
+  five the single-column edge), Haiku 5/10, **Sonnet 10/10 and all three OpenAI
+  models 10/10**. Two entries at 100% → `_check_admission` refuses it, so it is
+  **`warmup`** and **`v2` is two Metal tasks now — no laptop, no CUDA member.**
+  Flash-attention's ejection a second time. `docs/LESSONS.md` **L55**,
+  `docs/ROADMAP.md` **§13**.
+- ⭐ **The version-2 batchnorm re-sweep is done; both stay `warmup`.** Backward
+  Opus 10/10 Sonnet 10/10 Haiku **0/10** (the new `no_grad` test took Haiku's
+  last two), refused by the rule. Reduction Opus **8/10** Sonnet **9/10** Haiku
+  0/10 — the rule would **admit** it, but it stays `warmup` **by judgement**:
+  every frontier loss fails `chunk_sizes0` too, the single-chunk split where the
+  named mistake is correct by construction, so the admission-clearing draws never
+  touched the mechanism. L45 a second time, **L56**. The v1 draws are gone from
+  `calibration/`; `docs/LESSONS.md` **L51 is closed**.
+- 🔴 **Anthropic credit ran out mid-sweep** (`invalid_request_error`, same as
+  2026-08-09/09-06). Sixteen batchnorm draws came back `adapter_error`, counted
+  in neither side; topped up, the five short cells were re-run to ten clean
+  graded each. ⛔ **Full-gas parallelism (12 procs) drains a small credit balance
+  fast — check the Anthropic balance before a parallel sweep, not during.**
+- ⚡ **The sweep is API-bound, not GPU-bound** (~7% GPU util), so it ran twelve
+  ways in parallel, each process to its own `--results` dir to avoid filename
+  collisions on same-model-different-task draws. ~7 min, **$4.44**, 170 draws.
+  The orchestrator is `~/scratchbench-CUDA-KUTUSU-KOS.sh` (Mac-side: ships the
+  working tree with `tar` over `ssh`, not `git clone`, because the review fixes
+  are unpushed).
+- ✅ **All checks green from this session's output:** full suite **155 passed**
+  (nogpu plugin at `/tmp/sb_nogpu/nogpu_plugin.py`), `validate` **14/14**,
+  `check_calibration` **48 entries / 362 draws**, `check_cost` **362 files**,
+  both renderers match. README's three stale CUDA/`v2` claims corrected.
+- ⏳ **Still open, none a blocker:** the launch is editorial now — Show HN (§7,
+  `~/scratchbench-SHOW-HN-TASLAK.md`) and §12's standing debt (experiment
+  identity, full F02 isolation, front-page trim). ⛔ **Nothing is committed yet**
+  — the working tree change is one script away (`COMMITS.md` / the commit `.sh`),
+  and git is Selim's to run.
 
 ## State as of 2026-09-17, session 18 (verify before trusting)
 
