@@ -257,6 +257,28 @@ def task_table(payloads: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def tier_rate_table(payloads: list[dict], tier: str) -> str:
+    """One model per row: its pass rate over the tasks of a single tier.
+
+    The `v2-mac` sweep spans two tiers on one box — the laptop task
+    `flash_attention_backward` and the two Metal tasks — and a pooled rate over
+    both blends a GPU result into a laptop one. The leaderboard's own rule is
+    that tiers are never folded together, so this reports one tier on its own,
+    which is what the accelerated half actually measured (ROADMAP §5.2). Cost
+    columns are deliberately absent: a draw's cost is the whole draw's and does
+    not split by tier, so it would be the same blend one column over.
+    """
+    lines = ["| Model | Pass rate | Solved |", "|---|---:|---:|"]
+    for model, all_draws in by_model(payloads).items():
+        draws = [d for d in all_draws if graded(d)]
+        entries = [t for d in draws for t in graded(d) if t.get("tier") == tier]
+        solved = sum(1 for t in entries if t["passed"])
+        measured = len(entries)
+        rate = f"**{solved / measured:.0%}**" if measured else "-"
+        lines.append(f"| `{model}` | {rate} | {solved}/{measured} |")
+    return "\n".join(lines)
+
+
 RENDERERS = {
     "laptop-v1": model_table,
     "laptop-v1-by-task": task_table,
@@ -264,11 +286,12 @@ RENDERERS = {
     "cuda-rmsnorm": model_table,
     "v2-mac": model_table,
     "v2-mac-by-task": task_table,
+    "v2-mac-metal": lambda payloads: tier_rate_table(payloads, "accelerated"),
 }
 
 
 def render(name: str) -> str:
-    group = name.removesuffix("-by-task")
+    group = name.removesuffix("-by-task").removesuffix("-metal")
     return RENDERERS[name](load(group))
 
 
