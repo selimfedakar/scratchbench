@@ -524,3 +524,88 @@ zero, which is what makes two Claude rows comparable to each other.
 
 `docs/LESSONS.md` **L49**. The rule worth keeping: an invariant that holds by
 construction is only as portable as the construction.
+
+---
+
+## Session 19 — an exit code is not a verdict (F01/F03/F06)
+
+```bash
+bash ~/scratchbench-session19-commits.sh
+```
+
+Eight commits, one file each, one push at the end, nothing squashed. Order does
+not matter for CI here — no draws, no `meta.yaml`, no calibration — but the files
+go fix first, then the tests that pin it, then the prose:
+
+1. `runner/mps_stall.py` — the guard writes a sentinel when it fires.
+2. `runner/sandbox.py` — a pass requires the suite to have reached the declared
+   count; a stall requires the sentinel; a bare 125 is the solution's failure.
+3. `runner/cli.py` — `validate` keeps an unrun task off the validated total and
+   grows a `--strict` flag.
+4. `.github/workflows/ci.yml` — CI validates with `--strict`.
+5. `tests/test_runner.py` — six regression tests (one per door plus the bare-125
+   retry case), and the three stall tests updated to model a real stall by
+   writing the sentinel rather than returning the exit code alone.
+6. `docs/LESSONS.md` — L50.
+7. `docs/sessions/19-an-exit-code-is-not-a-verdict.md` — the journal.
+8. `README.md` — the LESSONS entry count, forty-nine to fifty.
+
+The review that produced these (`scratchbench-review-2026-10-16/`) is not in the
+repository and does not go in it. F02 — the run environment is not a security
+sandbox — is the next work package, not this one.
+
+---
+
+## Review follow-up, sessions 19–23 (2026-10-16/17) — ONE script, supersedes the session-19 pointer above
+
+```bash
+bash ~/scratchbench-review-fixes-commits.sh
+```
+
+The 2026-10-16 technical review's eight findings, closed. Delivered as a single
+script and a single push because the work was prepared in one working tree: the
+README's LESSONS count and the task counts climb across the packages, so an
+intermediate push would show a count ahead of the file that justifies it. One
+commit per file, nothing squashed, no AI attribution, push once at the end.
+
+Twenty-nine files. The order groups them by the finding they close, fix before
+the tests that pin it before the prose:
+
+- **F01/F03/F06** — `runner/mps_stall.py`, `runner/sandbox.py`, `runner/cli.py`,
+  `.github/workflows/ci.yml`.
+- **F04/F05** — both batchnorm references, their hidden tests, the reduction
+  prompt, both `meta.yaml` (version 2).
+- **F02** — `runner/sandbox.py` (credential strip, shared commit with F01),
+  README trust note.
+- **F07 / §5.1** — `runner/report.py` (version-keyed grouping, commit
+  provenance), `leaderboard/SET_MANIFESTS.yaml`.
+- **§5.2 / §6 / F08** — `tools/render_leaderboard.py`, `leaderboard/README.md`,
+  `README.md`, `TASK_FORMAT.md`, `CLAUDE.md`, `adapters/model_api.py`,
+  `runner/tasks.py`.
+- **The record** — `tests/test_runner.py`, `docs/LESSONS.md` (L50–L54), five
+  session journals, `docs/ROADMAP.md`, this file.
+
+Verified before delivery: full suite **155 passed** on the no-GPU plugin,
+`validate` 14/14, `check_cost` 311, `check_calibration` 44, both renderers in
+`--check`. The review itself (`scratchbench-review-2026-10-16/`) is not in the
+repository and does not go in it.
+
+---
+
+## Session 24 — the CUDA sweep (2026-10-28)
+
+The review follow-up above was never committed, and session 24 then edited some
+of the same files, so both ship together in one push. The queue is the script
+`~/scratchbench-session24-commits.sh` (git is Selim's to run):
+
+- 120 new calibration draws, one commit each (house style)
+- 69 superseded v1 batchnorm draws removed, one commit each
+- the two batchnorm tasks (reference, tests, prompt, meta) and the rmsnorm meta
+- the grader/harness review fixes (sandbox, mps_stall, cli, report, tasks, model_api)
+- tools (render_leaderboard, new render_chart), tests, CI
+- docs (ROADMAP §13, LESSONS L55/L56, SET_MANIFESTS, README, CLAUDE, sessions 19-24, pass-rates.svg)
+- a single push at the end, three attempts
+
+Verified before delivery: full suite **157 passed** on the no-GPU plugin,
+`validate` 14/14, `check_calibration` 48/362, `check_cost` 362, all three
+renderers in `--check`.
