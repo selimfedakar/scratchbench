@@ -13,6 +13,316 @@ Newest first.
 
 ---
 
+## L56 — a rate cleared the bar on draws that never touched the mechanism
+
+**What I expected.** `chunked_batchnorm_reduction` went to version 2 in the
+review — the reference under `no_grad` (F04) and the prompt stating the numeric
+domain the single reduction can keep (F05), two hidden tests added. I expected
+the re-sweep to look like v1 did: the frontier clearing it, Haiku failing, a
+`warmup` by the admission rule.
+
+**What happened.** The two new tests cost Opus one draw and Sonnet one: Opus
+8/10, Sonnet 9/10, Haiku 0/10. The top two are no longer both 100%, so
+`_check_admission` would now *admit* it — `v2` would finally have a laptop
+member. For about a minute that was the headline of the whole session.
+
+**Why it survived — nearly.** The rule reads rates, and the rates said
+discriminate. The shapes said the opposite, and I only saw it because L45 made
+me look. Every one of Opus's two losses and Sonnet's one fails *all six* chunk
+sizes, `chunk_sizes0` included — and `chunk_sizes0` is the single-chunk split,
+where the chunked-reduction mistake this task is named after is correct by
+construction. A draw that fails there is not getting the reduction wrong; it is
+wholesale broken, failing even the case the task cannot distinguish. So the
+admission-clearing losses are not the mechanism the task exists to measure. This
+is L45 exactly, one version later: a rate that clears the bar on draws that
+never exercised the thing the bar is about.
+
+**What changed.** It stays `warmup` by judgement, against the rule, and the
+meta.yaml comment and `ROADMAP.md` §9.4 say so in those words. Admitting it would
+publish a laptop number the field did not earn — L21 in yet another costume. The
+rule is a floor, never a finding (it cannot see a shape), and the second time
+that sentence has been true is worth more than the task.
+
+**What it cost.** Nearly a `v2` laptop member announced on a number that does not
+mean what the column says. The shape analysis was ten minutes against a day of
+wanting the task to count.
+
+## L55 — finishing a measurement can delete the task
+
+**What I expected.** To rent a CUDA box, finish `fused_rmsnorm_kernel` at ten
+draws per model across both vendors, and ship `v2` with its three accelerated
+members — the CUDA task and the two Metal ones. The sweep was the last thing
+between the repository and a launch.
+
+**What happened.** The sweep removed the task. Opus came back 5/10 (all five
+losses the single-column edge, the same signature as the August five-draw run),
+Haiku 5/10 on the wrapper contract, and `claude-sonnet-5`, `gpt-5.6-sol`,
+`gpt-5.6-terra` and `gpt-5.6-luna` all 10/10. Two entries at 100% is what
+`_check_admission` refuses, so the task I rented hardware to finish is `warmup`
+now and `v2` lost its CUDA member — down to two Metal tasks, no laptop and no
+CUDA.
+
+**Why it survived.** It did not survive, and that is the point: this is
+flash-attention's 2026-09-17 ejection a second time (the L43 session), and I
+should have expected it. More draws and a second vendor saturate the top of a
+task that five draws made look hard. The uncomfortable half is L46 wearing a new
+hat — `gpt-5.6-luna`, the cheapest model in the field, going 10/10 is half the
+reason the top two read 100%, and the rule calls a task Opus still fails half the
+time `warmup` on the strength of the cheapest model clearing it. I considered
+overriding the rule on that argument. I did not, because the last time a rule was
+bent after it refused a task its author liked, the bend was the lesson (L35).
+
+**What changed.** The task moved to `warmup`, its calibration block carries all
+six models cumulatively (Opus 6/15 over August and October, a Triton kernel's
+correctness not being a property of which CUDA card graded it), and the README
+says in its own voice that `v2`'s discrimination is Apple-silicon-only until a
+harder task exists. The thing I rented the box to prove is the thing that unmade
+the plan the box was rented for.
+
+**What it cost.** The launch's headline. `v2` was going to be "three accelerated
+tasks"; it is two Metal tasks, and the honest version of that is less of a pitch.
+About $4.44 of API spend and a rented 4090 to learn it, which is cheap for a
+number that would otherwise have been wrong.
+
+---
+
+## L54 — the rule was in the prose and not in the renderer
+
+**What I expected.** The leaderboard to keep its own rule. It says, in several
+places and in its own code, that the laptop and accelerated tiers are never
+folded into one number — the whole reproducibility claim rests on it. I believed
+that was enforced.
+
+**What happened.** The `v2` Mac-half table reported one pass rate per model over
+a sweep that covered a laptop task and two Metal tasks on the same box. `90%,
+27/30` for Opus is a laptop result and a GPU result averaged together under one
+heading. The by-task grid beneath it was honest; the headline rate was the exact
+blend the page forbids, three lines above where it forbids it. The claim counts
+("every set is frozen", "no cloud bill", a stale `251 files / 35 entries`) were
+in the same condition — true-sounding sentences nothing checked.
+
+**Why it survived.** `render_leaderboard` pooled `solved / measured` over every
+graded task in a draw, and nothing in it knew a tier from another. The rule
+lived in the prose, where a reader believes it, and not in the renderer, where it
+would be true. The same shape as "offline" (L52): a sentence doing the work the
+mechanism was not. A benchmark's claims are not decoration — someone reads "tiers
+are never folded" and trusts the number above it — so a claim without a check
+behind it is a liability the moment it stops being true, and this one had.
+
+**What changed.** A tier-filtered rate table renders the two Metal tasks on their
+own — Opus 85% over 17/20, not 90% over 27/30 — beside the mixed table, which is
+relabelled as the blend it is, with `flash_attention_backward` named as the
+laptop member set aside. The README claims are corrected to what is true: the CPU
+tier is free and the GPU tier and model calls are not, the originality claim is
+narrowed to "what I could not find", the frozen-set claim points at the manifest
+that now backs it, a row is the summary of however many draws it says, and the
+counts are regenerated. The editorial fixes are small; the lesson is that the
+rate was wrong in the direction the whole page promises it never is.
+
+**What it cost.** The blended numbers were real draws, correctly graded per task
+— nothing was miscounted at the task level, and the by-task grid always told the
+truth. What was wrong was the one number a skim reads, pointed the one way the
+page swears off. That is the expensive kind of wrong for a benchmark, because it
+is exactly the number a casual reader quotes.
+
+---
+
+## L53 — an experiment's name is not its identity
+
+**What I expected.** `group_draws` to already answer "which runs are draws of the
+same thing". It keys on model, task set, and the exact list of task slugs, and
+it was written carefully — the slug list is there to keep one-task debug probes
+out of a full sweep's error bar, which is a real bug it fixed.
+
+**What happened.** The review bumped a task's version under the same slug and the
+grouping folded the two together: a draw graded against version 1's tests and a
+draw graded against version 2's tests, reported as one experiment with one
+spread. The slug matched, so the key matched, and a contract change hid inside
+what reads as model sampling. Separately, `frozen_set` in meta.yaml was being
+treated as a set's membership, and tasks move between frozen sets as the frontier
+clears them — so "v1" had quietly stopped naming the eight tasks its leaderboard
+row was measured over.
+
+**Why it survived.** The key was built from what a run is *called* — its model
+name, its set name, its slugs — and not from what it *is*. A task's identity
+includes the version of its tests; a set's identity is the list it was measured
+on, frozen; a model's identity is the dated snapshot behind the alias. Every one
+of those can change while the name stays put, and a key made of names cannot see
+it. This is L50 and L51 again at the level of the whole experiment: a name is a
+claim of sameness, and sameness has to be checked, not assumed from the label.
+
+**What changed.** Grouping now keys coverage on `(slug, task_version)`, so draws
+across a version bump are two experiments, not one — and an unversioned legacy
+file is kept as `None` rather than assumed to be version 1, because incomplete
+provenance is not the same as a known one. Each run now records the git commit it
+came from and whether the tree was dirty (`results_version` 4), so a number can
+be tied back to the code that made it. And set membership is frozen in
+`leaderboard/SET_MANIFESTS.yaml`, re-derived from the published files by a test,
+with `frozen_set` demoted to the mutable evaluation label it always was.
+
+**What it cost, and what is still open.** Nothing published moved — every
+existing draw is version 1 and still groups as before. What this did not finish
+is the rest of a run's identity: the resolved model snapshot behind the alias,
+the hashes of the prompt and tests and solution, the dependency lock, and a
+stored solution that could actually be replayed. Those are recorded as debt in
+`ROADMAP.md` rather than quietly skipped, because the honest version of "I added
+provenance" has to say which provenance it did not add.
+
+---
+
+## L52 — "offline" was a word, not a mechanism
+
+**What I expected.** The graded run to be about as contained as it needed to be.
+`pytest_environment` is documented as "a deterministic, offline environment",
+the hidden tests are copied in only after the solver writes, and the sandbox
+module's own docstring talks about guarantees. I had read my own code as
+describing a sandbox.
+
+**What happened.** The review set one fake variable and read a sentinel file one
+directory up from the workdir, from inside a graded solution:
+
+```
+{"probe": "environment", "dummy_secret_inherited": true}
+{"probe": "outside_workdir_read", "sentinel_read": true}
+```
+
+The child inherited the whole parent environment — including, on a real run, the
+API key the adapter was called with — and could read and write anywhere the user
+could. "Offline" described nothing: there is no network block, no filesystem
+jail, no resource limit. The word was doing the work the code was not.
+
+**Why it survived.** The same shape as the two lessons under this one. "Offline"
+is a claim, and I had written it without building the thing it claims, exactly
+as exit 0 was read as "passed" and "we never read cache" was read as a fact
+about every vendor. A solver cannot read a test that is not on disk yet — that
+part is real and load-bearing — and I had let a true, narrow guarantee stand in
+for a broad one I had never implemented. The tests copied-in-late defence is
+about *information* (the solver must not see the answer); it was quietly
+promoted to a defence about *safety* (the solver cannot harm the host), which is
+a different problem with none of the same machinery behind it.
+
+**What changed.** Two things, and the line between them is the point.
+`pytest_environment` now strips credential-shaped variables, so the adapter's
+key — which lives in the parent, where the API call is actually made — does not
+reach the child that only runs pytest. That closes the one secret the harness
+itself introduces. Everything else is documentation, because env-cleaning is not
+isolation and pretending otherwise would be the original mistake again: `grade`'s
+docstring and a README "Running generated code" note now say plainly that the
+solution runs in the same interpreter with the host's filesystem and network,
+and that a real model's output should be run like any untrusted code until the
+disposable-container grading path exists. F02 is not closed; it is told the
+truth about.
+
+**What it cost.** Nothing leaked that I know of — the published runs were mine
+and the reviewer's, on my own machine. The cost is that "offline" sat in a
+docstring for the life of the repository telling every reader, me included, that
+a thing was safe which was only quiet. A benchmark's whole pitch is that you can
+run it; the honest version of that pitch has to include what running it does.
+
+---
+
+## L51 — a contract is only tested where the input makes it bite
+
+**What I expected.** The two chunked-batchnorm references to be done. Both are
+L2 on both halves, both are mutation-tested, both have a test named for every
+promise in the prompt — including a `test_the_gradients_carry_no_autograd_history`
+and a swept tolerance against autograd. The landmine note in CLAUDE.md says walk
+every promise to a test; I had.
+
+**What happened.** The same review handed each reference an input the tests never
+did. `test_the_gradients_carry_no_autograd_history` builds its case with
+detached tensors, so it asks "does the reference *add* history" and never "does
+it *pass history through*". Hand in an `x` that requires a gradient and both
+references returned `dx`, `dgamma`, `dbeta` carrying its `grad_fn` — the no-grad
+promise, broken, under a test written to protect it. And the variance tolerance
+was swept over inputs with a variance of order one, where
+`sum(x*x)/M - mean*mean` loses three digits to cancellation and the tolerance is
+set four orders above that. Cluster the inputs at `1 ± 1e-9` and the raw variance
+comes out *negative* — `-2.2e-16` against a true `1.5e-18` — and with an `eps`
+small enough not to rescue it, `sqrt` returns NaN. The prompt had only ever said
+"`eps` is positive".
+
+**Why it survived.** Both tests exercised the contract in the regime where the
+contract is slack. A promise is not tested by a test that names it; it is tested
+by an input that would break it if the promise were false. Detached inputs cannot
+exhibit a history leak no matter how badly the reference leaks, and an order-one
+variance cannot exhibit a cancellation the eps floor is four orders above. This
+is L8 — an unenforced promise lets two disagreeing implementations both pass —
+but one level meaner, because the enforcing test *existed* and pointed at the
+right line while testing the one input that could not fail it.
+
+**What changed.** Both references run every function under `no_grad`, which is
+the whole of the contract rather than a line of it, and a new test hands in
+tensors that require a gradient and checks the result and the inter-pass buffer
+come back clean — verified to fail if the decorator is removed. The reduction
+prompt now states the numerical domain the single-reduction interface can
+actually keep: inputs of order one and an `eps` of conventional size, over which
+`var + eps` stays positive, and explicitly *not* a variance driven below the
+arithmetic's floor by a smaller `eps`. A new test confirms the finite result on
+near-constant inputs, and claims only finiteness, because `1/sqrt(var + eps)`
+amplifies the cancellation and accuracy there is ill-conditioning the prompt
+already scopes out. Both tasks are **version 2**; their version-1 calibration is
+kept labelled as such and a re-sweep is pending (it would have graded against the
+old tests).
+
+**What it cost.** Nothing published — these are laptop `warmup` tasks whose rows
+are not the frontier story, and no draw was re-scored dishonestly. What it cost
+is the claim that "every promise has a test" meant what it sounded like. It meant
+every promise has a test; it did not mean every test has an input with teeth. The
+clamp I did not add is the tell: making `var.clamp_min(0)` the fix would have
+turned the NaN into a quiet wrong number, which is the trade a benchmark exists
+not to make.
+
+---
+
+## L50 — an exit code is a claim the process makes about itself
+
+**What I expected.** The grader to be sound. A reference passes, a wrong answer
+fails, a broken task is caught; the whole of `STATUSES` exists so no outcome
+reaches the leaderboard unclassified. I believed the classification was the
+careful part and the reading of pytest's result was mechanical.
+
+**What happened.** An outside review handed a solver one file —
+`import os; os._exit(0)` — and it was recorded **passed**. The hidden tests
+import the solution at collection; the solution killed the process before a
+single test ran; pytest exited 0 having judged nothing, and the grader read
+exit 0 as "everything passed". Two more of the same shape sat beside it. A CPU
+solution that returned 125 — the stall guard's exit code, on a task that has no
+guard — was recorded `mps_stalled`, machine noise dropped from the rate. And
+`validate` counted a task that declared a missing dependency, and so never ran
+at all, inside its "14 task(s) validated" total.
+
+**Why it survived.** Each one trusted a number the process produced about
+itself as if it were the thing the number stands for. Exit 0 does not mean the
+suite passed; it means a process ended with status zero, and anything in that
+process can end it. Exit 125 does not mean a stall; it means something returned
+125, and the guard is only one of the things that can. "The call returned" is
+not "the call was answered" — the same shape as L46, one layer down, and the
+`solution_error` docstring had already written the principle for the
+import-error case without my noticing it generalised: the starter imports
+cleanly by contract, so anything wrong in the graded directory was put there by
+whatever wrote the file.
+
+**What changed.** A pass now requires the run to have *reached the end*: the
+number of judged tests must equal `hidden_tests`, the count `validate` already
+re-derives on hardware that can run the task, so `0 passed` and `1 of 2 passed`
+are no longer passes. The stall guard writes a sentinel file beside the tests
+the instant it fires, and a `mps_stalled` verdict now requires that file to be
+present — an exit code a weak solution can hand back by accident no longer
+names a machine fault. `validate` keeps a task it could not run — missing
+dependency or absent accelerator — out of the validated total and reports it on
+its own line, with `--strict` turning "could not check" into a non-zero exit
+for CI. Five regression tests, one per door.
+
+**What it cost.** Nothing published — the reviewer produced these with crafted
+solutions, not real draws, and no leaderboard row came from a sabotaged run.
+But every number on the page rested on a grader that would have called a
+no-op a pass, and the thing a benchmark sells is that it would not. The gap
+was open for the life of the repository and closed in the session after it was
+shown to me.
+
+---
+
 ## L49 — the invariant was true, and it was a fact about one vendor
 
 **What I expected.** `test_nothing_published_was_billed_at_a_cache_rate` to keep
