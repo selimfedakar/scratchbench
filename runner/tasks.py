@@ -366,7 +366,15 @@ def discover_tasks(tasks_root: Path) -> list[Task]:
     """Every task under `tasks_root`, in slug order."""
     tasks_root = Path(tasks_root)
     if not tasks_root.is_dir():
-        raise TaskError(f"{tasks_root}: not a directory")
+        # The tasks live in the repository, not in the wheel: scratchbench is run
+        # from a checkout, and `pip install scratchbench` alone does not carry the
+        # task data (F08). Say so, rather than leaving "not a directory" to be
+        # read as a corrupt install.
+        raise TaskError(
+            f"no tasks directory at {tasks_root}. scratchbench runs from a clone, "
+            "not an installed wheel: `git clone` the repository and run the CLI "
+            "from there (the tasks are the benchmark and ship with the source)."
+        )
     return [
         load_task(child)
         for child in sorted(tasks_root.iterdir())
